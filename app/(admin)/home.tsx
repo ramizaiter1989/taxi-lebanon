@@ -11,7 +11,7 @@ const AdminHomeScreen: React.FC = () => {
     try {
       await AsyncStorage.removeItem('token');
       Alert.alert('Logged out', 'You have been logged out.');
-      navigation.replace('Login'); // Navigate back to login
+      router.replace('../Login'); // Navigate back to login
     } catch (error) {
       console.error('Logout Error:', error);
     }
@@ -23,12 +23,12 @@ const AdminHomeScreen: React.FC = () => {
       
       <Button
         title="Manage Drivers"
-        onPress={() => navigation.navigate('/(client)/home')}
+        onPress={() => router.replace('/(client)/home')}
       />
 
       <Button
         title="Manage Passengers"
-        onPress={() => navigation.navigate('/(rider)/home')}
+        onPress={() => router.replace('/(rider)/home')}
       />
 
       <Button
