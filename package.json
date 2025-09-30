@@ -6,7 +6,9 @@
     "start": "bunx rork start -p 395se1zoyqya78a7hmk8t --tunnel",
     "start-web": "bunx rork start -p 395se1zoyqya78a7hmk8t --web --tunnel",
     "start-web-dev": "DEBUG=expo* bunx rork start -p 395se1zoyqya78a7hmk8t --web --tunnel",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
