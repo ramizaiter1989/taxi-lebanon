@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Power, MapPin, Navigation, Clock, DollarSign, Phone, AlertTriangle } from 'lucide-react-native';
 import { useRide } from '@/hooks/ride-store';
 import { useUser } from '@/hooks/user-store';
-import MapComponent from '@/components/MapView';
+import MapView from '@/components/MapView';
 import { LEBANON_LOCATIONS } from '@/constants/lebanon-locations';
 
 export default function RiderHomeScreen() {
@@ -105,7 +105,7 @@ export default function RiderHomeScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.mapContainer}>
-          <MapComponent
+          <MapView
             pickup={currentRide.pickup}
             dropoff={currentRide.dropoff}
             driverLocation={currentLocation}

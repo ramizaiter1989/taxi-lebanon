@@ -1,18 +1,31 @@
+// app/(auth)/login.tsx
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  Button, 
-  StyleSheet, 
-  Alert, 
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Dimensions,
   ActivityIndicator,
-  TouchableOpacity
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Alert,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+const { width, height } = Dimensions.get('window');
 const API_URL = 'https://4f7abfb7d80b.ngrok-free.app/api/login';
 
 interface LoginResponse {
@@ -21,18 +34,27 @@ interface LoginResponse {
     id: number;
     name: string;
     email: string;
-    role: 'client' | 'rider' | 'admin' | string;
+    role: 'driver' | 'passenger' | 'admin' | string;
   };
 }
 
-const LoginScreen: React.FC = () => {
+export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+
+  // Animation values
+  const emailScale = useSharedValue(1);
+  const passwordScale = useSharedValue(1);
+  const buttonScale = useSharedValue(1);
 
   const handleLogin = async () => {
     console.log('[Login] Starting login process...');
+    
     if (!email || !password) {
       console.log('[Login] Validation failed: missing email or password');
       Alert.alert('Error', 'Please enter both email and password.');
@@ -43,29 +65,51 @@ const LoginScreen: React.FC = () => {
 
     try {
       console.log('[Login] Sending request to API:', API_URL);
-      const response = await axios.post<LoginResponse>(API_URL, { email, password });
+      const response = await axios.post<LoginResponse>(API_URL, { 
+        email, 
+        password 
+      });
       console.log('[Login] API response received:', response.data);
 
       const { token, user } = response.data;
 
+      // Save token
       await AsyncStorage.setItem('token', token);
       console.log('[Login] Token saved to AsyncStorage');
 
-      Alert.alert('Success', `Logged in as ${user.name}.`);
+      // Save credentials if remember me is checked
+      if (rememberMe) {
+        await AsyncStorage.setItem('savedEmail', email);
+        console.log('[Login] Email saved for Remember Me');
+      }
 
-      if (user.role === 'client') router.replace('/(client)/home');
-      else if (user.role === 'rider') router.replace('/(rider)/home');
-      else if (user.role === 'admin') router.replace('/(admin)/home');
-      else {
+      Alert.alert('Success', `Welcome back, ${user.name}! 🎉`);
+
+      // Navigate based on role
+      if (user.role === 'driver') {
+        router.replace('/(client)/home');
+      } else if (user.role === 'passenger') {
+        router.replace('/(rider)/home');
+      } else if (user.role === 'admin') {
+        router.replace('/(admin)/home');
+      } else {
         console.log('[Login] Unknown user role:', user.role);
         Alert.alert('Error', 'Unknown user role.');
       }
     } catch (error) {
       console.log('[Login] Login failed with error:', error);
-      let errorMessage = 'Login failed.';
+      let errorMessage = 'Login failed. Please check your credentials.';
+      
       if (axios.isAxiosError(error)) {
-        errorMessage = error.response?.data?.message || error.message;
+        if (error.response?.status === 401) {
+          errorMessage = 'Invalid email or password.';
+        } else if (error.response?.status === 500) {
+          errorMessage = 'Server error. Please try again later.';
+        } else {
+          errorMessage = error.response?.data?.message || error.message;
+        }
       }
+      
       Alert.alert('Login Failed', errorMessage);
     } finally {
       console.log('[Login] Login process finished');
@@ -73,47 +117,605 @@ const LoginScreen: React.FC = () => {
     }
   };
 
+  // Animated styles
+  const emailAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: withSpring(emailScale.value) }],
+  }));
+
+  const passwordAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: withSpring(passwordScale.value) }],
+  }));
+
+  const buttonAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: withSpring(buttonScale.value) }],
+  }));
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome Back</Text>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Animated Background Blobs */}
+        <View style={styles.backgroundContainer}>
+          <LinearGradient
+            colors={['#a855f7', '#ec4899']}
+            style={[styles.blob, styles.blob1]}
+          />
+          <LinearGradient
+            colors={['#ec4899', '#3b82f6']}
+            style={[styles.blob, styles.blob2]}
+          />
+          <LinearGradient
+            colors={['#3b82f6', '#8b5cf6']}
+            style={[styles.blob, styles.blob3]}
+          />
+        </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-      
-      <TextInput
-        style={styles.input}
-        placeholder="Password or code"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
+        {/* Floating Decorative Elements */}
+        <View style={[styles.floatingElement, styles.floatingTop]}>
+          <LinearGradient
+            colors={['#ec4899', '#8b5cf6']}
+            style={styles.floatingGradient}
+          />
+        </View>
 
-      <Button title="Login" onPress={handleLogin} disabled={isLoading} />
+        {/* Main Card with Glassmorphism */}
+        <BlurView intensity={80} tint="light" style={styles.card}>
+          {/* Decorative corner elements */}
+          <View style={[styles.cornerDecor, styles.cornerTopRight]}>
+            <LinearGradient
+              colors={['#ec4899', '#8b5cf6']}
+              style={styles.cornerGradient}
+            />
+          </View>
+          <View style={[styles.cornerDecor, styles.cornerBottomLeft]}>
+            <LinearGradient
+              colors={['#3b82f6', '#8b5cf6']}
+              style={styles.cornerGradient}
+            />
+          </View>
 
-      {isLoading && <ActivityIndicator style={styles.loading} size="large" color="#0000ff" />}
+          {/* Logo Section */}
+          <View style={styles.logoContainer}>
+            <View style={styles.logoWrapper}>
+              <LinearGradient
+                colors={['#ec4899', '#8b5cf6', '#3b82f6']}
+                style={styles.logoGradient}
+              >
+                <Ionicons name="car" size={48} color="#fff" />
+              </LinearGradient>
+              <View style={styles.logoShadow} />
+            </View>
+            <Text style={styles.title}>SafeRide</Text>
+            <Text style={styles.subtitle}>Your trusted women's taxi service</Text>
+          </View>
 
-      {/* Registration Link */}
-      <View style={{ marginTop: 20, alignItems: 'center' }}>
-        <Text>Don't have an account?</Text>
-        <TouchableOpacity onPress={() => router.push('/register')}>
-          <Text style={{ color: '#007bff', marginTop: 5 }}>Register</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+          {/* Email Input */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Email Address</Text>
+            <Animated.View style={[emailAnimatedStyle]}>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  focusedField === 'email' && styles.inputFocused,
+                ]}
+              >
+                <View style={styles.inputContent}>
+                  <Ionicons
+                    name="mail"
+                    size={20}
+                    color="#9ca3af"
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="your@email.com"
+                    placeholderTextColor="#9ca3af"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    onFocus={() => {
+                      setFocusedField('email');
+                      emailScale.value = 1.02;
+                    }}
+                    onBlur={() => {
+                      setFocusedField(null);
+                      emailScale.value = 1;
+                    }}
+                  />
+                </View>
+              </View>
+            </Animated.View>
+          </View>
+
+          {/* Password Input */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Password</Text>
+            <Animated.View style={[passwordAnimatedStyle]}>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  focusedField === 'password' && styles.inputFocused,
+                ]}
+              >
+                <View style={styles.inputContent}>
+                  <Ionicons
+                    name="lock-closed"
+                    size={20}
+                    color="#9ca3af"
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={[styles.input, styles.passwordInput]}
+                    placeholder="Enter your password"
+                    placeholderTextColor="#9ca3af"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    onFocus={() => {
+                      setFocusedField('password');
+                      passwordScale.value = 1.02;
+                    }}
+                    onBlur={() => {
+                      setFocusedField(null);
+                      passwordScale.value = 1;
+                    }}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.eyeButton}
+                  >
+                    <Ionicons
+                      name={showPassword ? 'eye-off' : 'eye'}
+                      size={20}
+                      color="#6b7280"
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Animated.View>
+          </View>
+
+          {/* Remember Me & Forgot Password */}
+          <View style={styles.optionsRow}>
+            <TouchableOpacity
+              style={styles.rememberMe}
+              onPress={() => setRememberMe(!rememberMe)}
+            >
+              <View
+                style={[
+                  styles.checkbox,
+                  rememberMe && styles.checkboxChecked,
+                ]}
+              >
+                {rememberMe && (
+                  <Ionicons name="checkmark" size={16} color="#fff" />
+                )}
+              </View>
+              <Text style={styles.rememberText}>Remember me</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.replace('/forgot-password')}>
+              <Text style={styles.forgotText}>Forgot Password?</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Sign In Button */}
+          <Animated.View style={buttonAnimatedStyle}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPressIn={() => (buttonScale.value = 0.95)}
+              onPressOut={() => (buttonScale.value = 1)}
+              onPress={handleLogin}
+              disabled={isLoading}
+            >
+              <LinearGradient
+                colors={['#ec4899', '#8b5cf6', '#3b82f6']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.signInButton}
+              >
+                {isLoading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator color="#fff" size="small" />
+                    <Text style={styles.signInText}>Signing in...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.signInText}>Sign In</Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>Or continue with</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Social Login Buttons */}
+          <View style={styles.socialRow}>
+            <TouchableOpacity 
+              style={styles.socialButton}
+              onPress={() => Alert.alert('Coming Soon', 'Google login will be available soon!')}
+            >
+              <View style={styles.socialContent}>
+                <Text style={styles.googleText}>G</Text>
+                <Text style={styles.socialLabel}>Google</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.socialButton, styles.appleButton]}
+              onPress={() => Alert.alert('Coming Soon', 'Apple login will be available soon!')}
+            >
+              <View style={styles.socialContent}>
+                <Ionicons name="logo-apple" size={20} color="#fff" />
+                <Text style={[styles.socialLabel, styles.appleLabelText]}>
+                  Apple
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          {/* Sign Up Link */}
+          <View style={styles.signUpContainer}>
+            <Text style={styles.signUpText}>Don't have an account? </Text>
+            <TouchableOpacity onPress={() => router.push('/register')}>
+              <Text style={styles.signUpLink}>Sign Up</Text>
+            </TouchableOpacity>
+          </View>
+        </BlurView>
+
+        {/* Floating Badges */}
+        <View style={[styles.badge, styles.verifiedBadge]}>
+          <LinearGradient
+            colors={['#10b981', '#059669']}
+            style={styles.badgeGradient}
+          >
+            <Text style={styles.badgeText}>✓ Verified</Text>
+          </LinearGradient>
+        </View>
+        <View style={[styles.badge, styles.secureBadge]}>
+          <LinearGradient
+            colors={['#3b82f6', '#6366f1']}
+            style={styles.badgeGradient}
+          >
+            <Text style={styles.badgeText}>🔒 Secure</Text>
+          </LinearGradient>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 20, backgroundColor: '#f5f5f5' },
-  title: { fontSize: 28, marginBottom: 30, textAlign: 'center', fontWeight: 'bold', color: '#333' },
-  input: { height: 50, borderColor: '#ddd', borderWidth: 1, borderRadius: 10, marginBottom: 15, paddingHorizontal: 15, backgroundColor: '#fff', fontSize: 16 },
-  loading: { marginTop: 20, alignItems: 'center' },
+  container: {
+    flex: 1,
+    backgroundColor: '#f8f9ff',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: 20,
+    minHeight: height,
+  },
+  backgroundContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  blob: {
+    position: 'absolute',
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    opacity: 0.3,
+  },
+  blob1: {
+    top: 80,
+    left: -100,
+  },
+  blob2: {
+    top: 150,
+    right: -120,
+  },
+  blob3: {
+    bottom: 100,
+    left: width / 3,
+  },
+  floatingElement: {
+    position: 'absolute',
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  floatingTop: {
+    top: 60,
+    right: 20,
+    transform: [{ rotate: '12deg' }],
+  },
+  floatingGradient: {
+    flex: 1,
+    opacity: 0.6,
+  },
+  card: {
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 30,
+    padding: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.25,
+    shadowRadius: 30,
+    elevation: 20,
+    overflow: 'hidden',
+  },
+  cornerDecor: {
+    position: 'absolute',
+    width: 60,
+    height: 60,
+    borderRadius: 15,
+    overflow: 'hidden',
+    opacity: 0.6,
+  },
+  cornerTopRight: {
+    top: -20,
+    right: -20,
+    transform: [{ rotate: '12deg' }],
+  },
+  cornerBottomLeft: {
+    bottom: -15,
+    left: -15,
+    transform: [{ rotate: '-12deg' }],
+  },
+  cornerGradient: {
+    flex: 1,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  logoWrapper: {
+    position: 'relative',
+    marginBottom: 15,
+  },
+  logoGradient: {
+    width: 100,
+    height: 100,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#8b5cf6',
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.4,
+    shadowRadius: 25,
+    elevation: 15,
+  },
+  logoShadow: {
+    position: 'absolute',
+    bottom: -10,
+    left: 10,
+    right: 10,
+    height: 20,
+    backgroundColor: '#8b5cf6',
+    borderRadius: 50,
+    opacity: 0.3,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#8b5cf6',
+    marginBottom: 5,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  inputWrapper: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  inputFocused: {
+    borderColor: '#8b5cf6',
+    shadowColor: '#8b5cf6',
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 10,
+  },
+  inputContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+  },
+  inputIcon: {
+    marginRight: 10,
+  },
+  input: {
+    flex: 1,
+    paddingVertical: 15,
+    fontSize: 16,
+    color: '#1f2937',
+  },
+  passwordInput: {
+    paddingRight: 45,
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: 15,
+    padding: 5,
+  },
+  optionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 25,
+  },
+  rememberMe: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  checkboxChecked: {
+    backgroundColor: '#8b5cf6',
+    borderColor: '#8b5cf6',
+  },
+  rememberText: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  forgotText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8b5cf6',
+  },
+  signInButton: {
+    paddingVertical: 18,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginBottom: 25,
+    shadowColor: '#8b5cf6',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 15,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  signInText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e5e7eb',
+  },
+  dividerText: {
+    marginHorizontal: 15,
+    fontSize: 13,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  socialRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 25,
+  },
+  socialButton: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+    paddingVertical: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  appleButton: {
+    backgroundColor: '#000',
+    borderColor: '#000',
+  },
+  socialContent: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  googleText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#4285F4',
+  },
+  socialLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  appleLabelText: {
+    color: '#fff',
+  },
+  signUpContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  signUpText: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  signUpLink: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#8b5cf6',
+  },
+  badge: {
+    position: 'absolute',
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  verifiedBadge: {
+    top: 40,
+    left: width / 4,
+    transform: [{ rotate: '-12deg' }],
+  },
+  secureBadge: {
+    bottom: height / 3,
+    right: width / 4,
+    transform: [{ rotate: '12deg' }],
+  },
+  badgeGradient: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
 });
-
-export default LoginScreen;

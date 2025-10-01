@@ -6,7 +6,7 @@ import { MapPin, Navigation, Clock, DollarSign, Phone, AlertTriangle } from 'luc
 import { useRide } from '@/hooks/ride-store';
 import { useUser } from '@/hooks/user-store';
 import { LEBANON_LOCATIONS } from '@/constants/lebanon-locations';
-import MapComponent from '@/components/MapView';
+import MapView from '@/components/MapView';
 import { Location } from '@/types/user';
 
 export default function ClientHomeScreen() {
@@ -88,7 +88,7 @@ export default function ClientHomeScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.mapContainer}>
-          <MapComponent
+          <MapView
             pickup={currentRide.pickup}
             dropoff={currentRide.dropoff}
             driverLocation={driverLocation || undefined}
@@ -171,7 +171,7 @@ export default function ClientHomeScreen() {
               <Text style={styles.cancelSelectionText}>Cancel</Text>
             </TouchableOpacity>
           </View>
-          <MapComponent
+          <MapView
             isSelectionMode={true}
             onLocationSelect={handleLocationSelect}
             testID="location-selection-map"
