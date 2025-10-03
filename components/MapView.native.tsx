@@ -1,211 +1,240 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { View, StyleSheet, Platform, Text } from 'react-native';
-import MapViewNative, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
+import { WebView } from 'react-native-webview';
+import { useMap } from '@/providers/MapProvider';
+import { useUser } from '@/providers/UserProvider';
 import * as Location from 'expo-location';
-import { Location as LocationType, MapRegion, RouteCoordinate } from '@/types/user';
-import { BEIRUT_CENTER } from '@/constants/lebanon-locations';
+import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Navigation, Layers, Plus, Minus, MapPin, Flag, X, Route, User, Search } from 'lucide-react-native';
 
-interface MapComponentProps {
-  pickup?: LocationType;
-  dropoff?: LocationType;
-  driverLocation?: LocationType;
-  onLocationSelect?: (location: LocationType) => void;
-  showRoute?: boolean;
-  followDriver?: boolean;
+interface MapComponentWebViewProps {
+  pickup?: { latitude: number; longitude: number; address: string };
+  dropoff?: { latitude: number; longitude: number; address: string };
+  driverLocation?: { latitude: number; longitude: number };
+  onLocationSelect?: (location: { latitude: number; longitude: number; address: string }) => void;
   isSelectionMode?: boolean;
-  testID?: string;
+  showRoute?: boolean;
 }
 
-export default function MapComponent({
+export default function MapComponentWebView({
   pickup,
   dropoff,
   driverLocation,
   onLocationSelect,
-  showRoute = false,
-  followDriver = false,
   isSelectionMode = false,
-  testID
-}: MapComponentProps) {
-  const mapRef = useRef<any>(null);
-  const [region, setRegion] = useState<MapRegion>({
-    latitude: BEIRUT_CENTER.latitude,
-    longitude: BEIRUT_CENTER.longitude,
-    latitudeDelta: 0.0922,
-    longitudeDelta: 0.0421,
-  });
-  const [routeCoordinates, setRouteCoordinates] = useState<RouteCoordinate[]>([]);
-  const [userLocation, setUserLocation] = useState<LocationType | null>(null);
+  showRoute = false
+}: MapComponentWebViewProps) {
+  const webViewRef = useRef<WebView>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [mapLayer, setMapLayer] = useState<'street' | 'satellite' | 'terrain'>('street');
+  const { userData, isLoading: userLoading } = useUser();
+  const {
+    markers,
+    addMarker,
+    clearMarkers,
+    selectedPlace,
+    routeStart,
+    routeEnd,
+    isRoutingMode,
+    setRoutingMode,
+    setRouteStart,
+    setRouteEnd,
+    currentRoute,
+    calculateRoute,
+    clearRoute,
+    setUserLocation,
+    startRoutingFromCurrentLocation
+  } = useMap();
 
+  // Redirect if not logged in
   useEffect(() => {
-    getCurrentLocation();
-  }, []);
-
-  useEffect(() => {
-    if (followDriver && driverLocation && mapRef.current) {
-      mapRef.current.animateToRegion({
-        latitude: driverLocation.latitude,
-        longitude: driverLocation.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      }, 1000);
+    if (!userLoading && !userData) {
+      router.replace('/login');
     }
-  }, [driverLocation, followDriver]);
+  }, [userData, userLoading]);
 
+  // Get current location
   useEffect(() => {
-    if (showRoute && pickup && dropoff) {
-      generateRoute(pickup, dropoff);
-    }
-  }, [pickup, dropoff, showRoute]);
-
-  const getCurrentLocation = async () => {
-    try {
+    (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        console.log('Location permission denied');
-        return;
-      }
+      if (status !== 'granted') return;
 
       const location = await Location.getCurrentPositionAsync({});
-      const currentLocation: LocationType = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        address: 'Current Location'
-      };
-      
-      setUserLocation(currentLocation);
-      setRegion({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        latitudeDelta: 0.0922,
-        longitudeDelta: 0.0421,
-      });
-    } catch (error) {
-      console.log('Error getting location:', error);
-    }
-  };
+      setUserLocation({ lat: location.coords.latitude, lng: location.coords.longitude });
 
-  const generateRoute = (start: LocationType, end: LocationType) => {
-    const coordinates: RouteCoordinate[] = [
-      { latitude: start.latitude, longitude: start.longitude },
-      { latitude: end.latitude, longitude: end.longitude }
-    ];
-    setRouteCoordinates(coordinates);
-  };
+      webViewRef.current?.postMessage(JSON.stringify({
+        type: 'setView',
+        lat: location.coords.latitude,
+        lng: location.coords.longitude,
+        zoom: 15
+      }));
+    })();
+  }, [setUserLocation]);
 
-  const handleMapPress = async (event: any) => {
-    if (!isSelectionMode || !onLocationSelect) return;
-
-    const coordinate = event.nativeEvent.coordinate;
-    try {
-      const reverseGeocode = await Location.reverseGeocodeAsync({
-        latitude: coordinate.latitude,
-        longitude: coordinate.longitude,
-      });
-
-      const address = reverseGeocode[0] ? 
-        `${reverseGeocode[0].street || ''} ${reverseGeocode[0].city || ''}, ${reverseGeocode[0].country || 'Lebanon'}`.trim() :
-        'Selected Location';
-
-      const location: LocationType = {
-        latitude: coordinate.latitude,
-        longitude: coordinate.longitude,
-        address
-      };
-
-      onLocationSelect(location);
-    } catch (error) {
-      console.log('Error reverse geocoding:', error);
-      const location: LocationType = {
-        latitude: coordinate.latitude,
-        longitude: coordinate.longitude,
-        address: 'Selected Location'
-      };
-      onLocationSelect(location);
-    }
-  };
-
-  const fitToCoordinates = useCallback(() => {
-    if (!mapRef.current) return;
-
-    const coordinates = [];
-    if (pickup) coordinates.push(pickup);
-    if (dropoff) coordinates.push(dropoff);
-    if (driverLocation) coordinates.push(driverLocation);
-    if (userLocation) coordinates.push(userLocation);
-
-    if (coordinates.length > 0) {
-      mapRef.current.fitToCoordinates(coordinates, {
-        edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
-        animated: true,
-      });
-    }
-  }, [pickup, dropoff, driverLocation, userLocation]);
-
+  // Add pickup, dropoff, driver markers
   useEffect(() => {
-    if (pickup || dropoff || driverLocation) {
-      const timeout = setTimeout(fitToCoordinates, 500);
-      return () => clearTimeout(timeout);
+    if (pickup) addMarker({ id: 'pickup', lat: pickup.latitude, lng: pickup.longitude, title: 'Pickup', description: pickup.address });
+    if (dropoff) addMarker({ id: 'dropoff', lat: dropoff.latitude, lng: dropoff.longitude, title: 'Dropoff', description: dropoff.address });
+    if (driverLocation) addMarker({ id: 'driver', lat: driverLocation.latitude, lng: driverLocation.longitude, title: 'Driver', description: 'Driver location' });
+  }, [pickup, dropoff, driverLocation, addMarker]);
+
+  // Send markers to WebView
+  useEffect(() => {
+    markers.forEach(marker => {
+      webViewRef.current?.postMessage(JSON.stringify({
+        type: 'addMarker',
+        ...marker
+      }));
+    });
+  }, [markers]);
+
+  // Route calculation and display
+  useEffect(() => {
+    if (routeStart && routeEnd) {
+      calculateRoute().then(() => {
+        if (currentRoute) {
+          webViewRef.current?.postMessage(JSON.stringify({
+            type: 'showRoute',
+            route: currentRoute
+          }));
+        }
+      });
     }
-  }, [pickup, dropoff, driverLocation, fitToCoordinates]);
+  }, [routeStart, routeEnd, calculateRoute, currentRoute]);
+
+  // Handle map clicks from WebView
+  const handleMapMessage = (event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === 'mapClick') {
+        const location = { latitude: data.lat, longitude: data.lng, address: 'Selected Location' };
+        if (isSelectionMode && onLocationSelect) {
+          onLocationSelect(location);
+        } else if (isRoutingMode) {
+          if (!routeStart) setRouteStart({ id: 'start', lat: data.lat, lng: data.lng, title: 'Start', description: 'Route start' });
+          else if (!routeEnd) setRouteEnd({ id: 'end', lat: data.lat, lng: data.lng, title: 'End', description: 'Route end' });
+        } else {
+          addMarker({ id: String(Date.now()), lat: data.lat, lng: data.lng, title: 'Custom', description: location.address });
+        }
+      }
+    } catch (error) {
+      console.error('Error handling map message:', error);
+    }
+  };
+
+  const zoomIn = () => webViewRef.current?.postMessage(JSON.stringify({ type: 'zoomIn' }));
+  const zoomOut = () => webViewRef.current?.postMessage(JSON.stringify({ type: 'zoomOut' }));
+  const centerOnUser = () => {
+    if (!userData) return;
+    webViewRef.current?.postMessage(JSON.stringify({ type: 'setView', lat: userData?.lat, lng: userData?.lng, zoom: 15 }));
+  };
+
+  const changeLayer = (layer: 'street' | 'satellite' | 'terrain') => {
+    setMapLayer(layer);
+    webViewRef.current?.postMessage(JSON.stringify({ type: 'changeLayer', layer }));
+  };
+
+  const mapHTML = `<!DOCTYPE html>
+  <html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+      body { margin:0; padding:0; }
+      #map { height:100vh; width:100vw; }
+      .leaflet-container { background:#f0f0f0; }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script>
+      var map = L.map('map', { zoomControl:false, attributionControl:false }).setView([33.8938, 35.5018], 13);
+      var layers = {
+        street: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }),
+        satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }),
+        terrain: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17 })
+      };
+      layers.street.addTo(map);
+      var currentLayer='street';
+      var markers={}; var routeLayer=null;
+
+      map.on('click', e => { window.ReactNativeWebView.postMessage(JSON.stringify({ type:'mapClick', lat:e.latlng.lat, lng:e.latlng.lng })) });
+
+      document.addEventListener('message', e => handleMessage(e.data));
+      window.addEventListener('message', e => handleMessage(e.data));
+
+      function handleMessage(data){
+        try{
+          var msg=JSON.parse(data);
+          switch(msg.type){
+            case 'setView': map.setView([msg.lat,msg.lng],msg.zoom||map.getZoom()); break;
+            case 'addMarker':
+              if(markers[msg.id]) map.removeLayer(markers[msg.id]);
+              var marker=L.marker([msg.lat,msg.lng]).addTo(map).bindPopup('<b>'+msg.title+'</b><br>'+msg.description);
+              markers[msg.id]=marker;
+              break;
+            case 'clearMarkers':
+              for(var id in markers) map.removeLayer(markers[id]); markers={}; break;
+            case 'zoomIn': map.zoomIn(); break;
+            case 'zoomOut': map.zoomOut(); break;
+            case 'changeLayer': map.removeLayer(layers[currentLayer]); layers[msg.layer].addTo(map); currentLayer=msg.layer; break;
+            case 'showRoute':
+              if(routeLayer) map.removeLayer(routeLayer);
+              var coords=msg.route.coordinates.map(c=>[c[0],c[1]]);
+              routeLayer=L.polyline(coords,{color:'#007AFF',weight:5,opacity:0.8}).addTo(map);
+              map.fitBounds(routeLayer.getBounds(),{padding:[20,20]});
+              break;
+            case 'clearRoute': if(routeLayer){map.removeLayer(routeLayer);routeLayer=null;} break;
+          }
+        } catch(e){console.error(e);}
+      }
+
+      setTimeout(()=>window.ReactNativeWebView.postMessage(JSON.stringify({type:'ready'})),100);
+    </script>
+  </body>
+  </html>`;
 
   return (
     <View style={styles.container}>
-      <MapViewNative
-        ref={mapRef}
+      <WebView
+        ref={webViewRef}
+        source={{ html: mapHTML }}
         style={styles.map}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-        region={region}
-        onRegionChangeComplete={setRegion}
-        onPress={handleMapPress}
-        showsUserLocation={true}
-        showsMyLocationButton={true}
-        testID={testID}
-      >
-        {pickup && (
-          <Marker
-            coordinate={pickup}
-            title="Pickup Location"
-            description={pickup.address}
-            pinColor="green"
-          />
-        )}
-        
-        {dropoff && (
-          <Marker
-            coordinate={dropoff}
-            title="Dropoff Location"
-            description={dropoff.address}
-            pinColor="red"
-          />
-        )}
-        
-        {driverLocation && (
-          <Marker
-            coordinate={driverLocation}
-            title="Driver Location"
-            description="Your driver is here"
-            pinColor="blue"
-          />
-        )}
-        
-        {showRoute && routeCoordinates.length > 0 && (
-          <Polyline
-            coordinates={routeCoordinates}
-            strokeColor="#6366f1"
-            strokeWidth={4}
-            lineDashPattern={[5, 5]}
-          />
-        )}
-      </MapViewNative>
+        onMessage={handleMapMessage}
+        onLoadEnd={() => setIsLoading(false)}
+        javaScriptEnabled
+        domStorageEnabled
+        startInLoadingState
+        mixedContentMode="compatibility"
+      />
+      {isLoading && <ActivityIndicator style={StyleSheet.absoluteFill} size="large" />}
+      {/* Zoom & Layer controls */}
+      <View style={styles.controls}>
+        <TouchableOpacity onPress={zoomIn} style={styles.controlButton}><Plus size={24} color="white" /></TouchableOpacity>
+        <TouchableOpacity onPress={zoomOut} style={styles.controlButton}><Minus size={24} color="white" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => changeLayer('street')} style={styles.controlButton}><MapPin size={24} color="white" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => changeLayer('satellite')} style={styles.controlButton}><Flag size={24} color="white" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => changeLayer('terrain')} style={styles.controlButton}><Route size={24} color="white" /></TouchableOpacity>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  container: { flex: 1 },
+  map: { flex: 1 },
+  controls: {
+    position: 'absolute',
+    right: 10,
+    top: 50,
+    flexDirection: 'column',
+    gap: 10
   },
-  map: {
-    flex: 1,
-  },
+  controlButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    padding: 8
+  }
 });
