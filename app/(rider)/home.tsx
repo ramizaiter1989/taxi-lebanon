@@ -1,19 +1,83 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Power, MapPin, Navigation, Clock, DollarSign, Phone, AlertTriangle } from 'lucide-react-native';
 import { useRide } from '@/hooks/ride-store';
 import { useUser } from '@/hooks/user-store';
-import MapView from '@/components/MapView';
-import { LEBANON_LOCATIONS } from '@/constants/lebanon-locations';
+import { useMap } from '@/providers/MapProvider';
+import MapView from '../../components/MapView';
+import { Location } from '@/types/user';
+import * as LocationService from 'expo-location';
+
 
 export default function RiderHomeScreen() {
   const { user } = useUser();
   const { isDriverOnline, toggleDriverOnline, currentRide, acceptRide, updateRideStatus, updateDriverLocation, triggerSOSAlert } = useRide();
+  const { setUserLocation } = useMap();
   const [hasIncomingRequest, setHasIncomingRequest] = useState(false);
   const [showMap, setShowMap] = useState(false);
-  const [currentLocation, setCurrentLocation] = useState(LEBANON_LOCATIONS[0]);
+  const [currentLocation, setCurrentLocation] = useState<Location>({
+    latitude: 33.8938,
+    longitude: 35.5018,
+    address: 'Current Location'
+  });
+
+  // Track driver location
+  useEffect(() => {
+    let locationSubscription: LocationService.LocationSubscription | null = null;
+
+    const startLocationTracking = async () => {
+      const { status } = await LocationService.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('Location permission denied');
+        return;
+      }
+
+      // Get initial location
+      const location = await LocationService.getCurrentPositionAsync({});
+      const coords = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        address: 'Current Location'
+      };
+      setCurrentLocation(coords);
+      setUserLocation({ lat: coords.latitude, lng: coords.longitude });
+      updateDriverLocation(coords);
+
+      // Watch location changes if online
+      if (isDriverOnline) {
+        locationSubscription = await LocationService.watchPositionAsync(
+          {
+            accuracy: LocationService.Accuracy.High,
+            timeInterval: 10000, // Update every 10 seconds
+            distanceInterval: 50, // Update every 50 meters
+          },
+          (location) => {
+            const newCoords = {
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+              address: 'Current Location'
+            };
+            setCurrentLocation(newCoords);
+            setUserLocation({ lat: newCoords.latitude, lng: newCoords.longitude });
+            updateDriverLocation(newCoords);
+          }
+        );
+      }
+    };
+
+    if (isDriverOnline) {
+      startLocationTracking();
+    }
+
+    return () => {
+      if (locationSubscription) {
+        locationSubscription.remove();
+      }
+    };
+  }, [isDriverOnline, setUserLocation, updateDriverLocation]);
 
   const handleToggleOnline = () => {
     toggleDriverOnline();
@@ -72,16 +136,6 @@ export default function RiderHomeScreen() {
     );
   };
 
-  const handleLocationUpdate = (location: any) => {
-    const newLocation = {
-      latitude: location.latitude,
-      longitude: location.longitude,
-      address: 'Current Location'
-    };
-    setCurrentLocation(newLocation);
-    updateDriverLocation(newLocation);
-  };
-
   const getStatusColor = () => {
     if (!isDriverOnline) return '#6b7280';
     if (currentRide) return '#8b5cf6';
@@ -101,6 +155,7 @@ export default function RiderHomeScreen() {
     return 'Available for rides';
   };
 
+  // Map view during active ride
   if (showMap && currentRide) {
     return (
       <SafeAreaView style={styles.container}>
@@ -110,7 +165,7 @@ export default function RiderHomeScreen() {
             dropoff={currentRide.dropoff}
             driverLocation={currentLocation}
             showRoute={true}
-            
+            testID="rider-map"
           />
           
           <View style={styles.mapOverlay}>
@@ -146,7 +201,12 @@ export default function RiderHomeScreen() {
                   style={styles.statusButton}
                   onPress={() => handleUpdateStatus('on_way')}
                 >
-                  <Text style={styles.statusButtonText}>I&apos;m on my way</Text>
+                  <LinearGradient
+                    colors={['#8b5cf6', '#7c3aed']}
+                    style={styles.statusButtonGradient}
+                  >
+                    <Text style={styles.statusButtonText}>I'm on my way</Text>
+                  </LinearGradient>
                 </TouchableOpacity>
               )}
               {currentRide.status === 'on_way' && (
@@ -154,15 +214,25 @@ export default function RiderHomeScreen() {
                   style={styles.statusButton}
                   onPress={() => handleUpdateStatus('started')}
                 >
-                  <Text style={styles.statusButtonText}>Start Trip</Text>
+                  <LinearGradient
+                    colors={['#8b5cf6', '#7c3aed']}
+                    style={styles.statusButtonGradient}
+                  >
+                    <Text style={styles.statusButtonText}>Start Trip</Text>
+                  </LinearGradient>
                 </TouchableOpacity>
               )}
               {currentRide.status === 'started' && (
                 <TouchableOpacity
-                  style={[styles.statusButton, { backgroundColor: '#10b981' }]}
+                  style={styles.statusButton}
                   onPress={() => handleUpdateStatus('completed')}
                 >
-                  <Text style={styles.statusButtonText}>Complete Trip</Text>
+                  <LinearGradient
+                    colors={['#10b981', '#059669']}
+                    style={styles.statusButtonGradient}
+                  >
+                    <Text style={styles.statusButtonText}>Complete Trip</Text>
+                  </LinearGradient>
                 </TouchableOpacity>
               )}
             </View>
@@ -171,7 +241,7 @@ export default function RiderHomeScreen() {
       </SafeAreaView>
     );
   }
-
+  // Main driver dashboard
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
@@ -190,14 +260,19 @@ export default function RiderHomeScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.toggleButton, { backgroundColor: isDriverOnline ? '#ef4444' : '#10b981' }]}
+          style={styles.toggleButton}
           onPress={handleToggleOnline}
           testID="toggle-online-button"
         >
-          <Power size={24} color="white" />
-          <Text style={styles.toggleButtonText}>
-            {isDriverOnline ? 'Go Offline' : 'Go Online'}
-          </Text>
+          <LinearGradient
+            colors={isDriverOnline ? ['#ef4444', '#dc2626'] : ['#10b981', '#059669']}
+            style={styles.toggleButtonGradient}
+          >
+            <Power size={24} color="white" />
+            <Text style={styles.toggleButtonText}>
+              {isDriverOnline ? 'Go Offline' : 'Go Online'}
+            </Text>
+          </LinearGradient>
         </TouchableOpacity>
 
         {hasIncomingRequest && (
@@ -317,6 +392,7 @@ export default function RiderHomeScreen() {
   );
 }
 
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -361,6 +437,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
+  statusButtonGradient: {
+  borderRadius: 12,
+  padding: 16,
+  alignItems: 'center',
+  justifyContent: 'center',
+},
   sosButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -429,6 +511,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 18,
     marginBottom: 24,
+  },
+  toggleButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 16,
   },
   toggleButtonText: {
     color: 'white',
@@ -557,5 +646,13 @@ const styles = StyleSheet.create({
   waitingSubtext: {
     fontSize: 14,
     color: '#9ca3af',
+  },
+  // Map-specific styles
+  map: {
+    flex: 1,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    pointerEvents: 'box-none',
   },
 });

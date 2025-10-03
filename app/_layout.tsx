@@ -5,6 +5,7 @@ import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { UserProvider } from "@/hooks/user-store";
 import { RideProvider } from "@/hooks/ride-store";
+import { MapProvider } from "@/providers/MapProvider"; // Add this
 
 SplashScreen.preventAutoHideAsync();
 
@@ -15,9 +16,9 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerBackTitle: "Back" }}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="role-selection" options={{ headerShown: false }} />
+      <Stack.Screen name="search" options={{ headerShown: false }} /> {/* Add search route */}
       <Stack.Screen name="(client)" options={{ headerShown: false }} />
       <Stack.Screen name="(rider)" options={{ headerShown: false }} />
-      {/* <Stack.Screen name="modal" options={{ presentation: "modal" }} /> */}
     </Stack>
   );
 }
@@ -30,11 +31,13 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <UserProvider>
-          <RideProvider>
-            <RootLayoutNav />
-          </RideProvider>
-        </UserProvider>
+        <MapProvider> {/* Wrap everything with MapProvider */}
+          <UserProvider>
+            <RideProvider>
+              <RootLayoutNav />
+            </RideProvider>
+          </UserProvider>
+        </MapProvider>
       </GestureHandlerRootView>
     </QueryClientProvider>
   );

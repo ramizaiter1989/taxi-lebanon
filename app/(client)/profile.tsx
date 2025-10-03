@@ -5,6 +5,7 @@ import { useUser } from '@/hooks/user-store';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import { API_BASE_URL } from '@/constants/config';
 
 export default function ClientProfileScreen() {
   const { user, logout } = useUser();
@@ -22,7 +23,7 @@ export default function ClientProfileScreen() {
             const token = await AsyncStorage.getItem('token');
             if (token) {
               await axios.post(
-                'https://your-api-domain.com/api/logout',
+                `${API_BASE_URL}/logout`,
                 {},
                 { headers: { Authorization: `Bearer ${token}` } }
               );
