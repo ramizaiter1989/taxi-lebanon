@@ -3,23 +3,37 @@ import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'r
 import { User, Star, Settings, LogOut, Car, Shield } from 'lucide-react-native';
 import { useUser } from '@/hooks/user-store';
 import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Import the logout API function
+import { logout as apiLogout } from "../../services/AuthService";
 
 export default function RiderProfileScreen() {
-  const { user, logout } = useUser();
+  const { user, logout: clearUser } = useUser(); // renamed logout from user-store
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', onPress: async () => {
-          await logout();
-          router.replace('/role-selection');
-        }}
-      ]
-    );
-  };
+  const handleLogout = async () => {
+  try {
+    const token = await AsyncStorage.getItem("access_token");
+    if (!token) return Alert.alert("Error", "No token found");
+
+    // Call backend
+    await apiLogout(token);
+
+    // Clear frontend user state
+    clearUser();
+
+    // Remove token
+    await AsyncStorage.removeItem("access_token");
+
+    // Navigate to login
+    router.replace("/login");
+  } catch (err: any) {
+    console.error(err);
+    Alert.alert("Error", err.response?.data?.message || "Logout failed");
+  }
+};
+
+
 
   return (
     <SafeAreaView style={styles.container}>

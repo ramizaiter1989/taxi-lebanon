@@ -1,5 +1,6 @@
 // app/(auth)/login.tsx
 import React, { useState } from 'react';
+import { API_BASE_URL } from "../constants/config";
 import {
   View,
   Text,
@@ -26,7 +27,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
-const API_URL = 'https://4f7abfb7d80b.ngrok-free.app/api/login';
+const API_URL = `${API_BASE_URL}/login`;
 
 interface LoginResponse {
   token: string;

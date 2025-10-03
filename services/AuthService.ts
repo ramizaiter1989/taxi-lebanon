@@ -1,55 +1,75 @@
-import axios from 'axios';
+import axios from "axios";
+import { API_BASE_URL } from "../constants/config";
 
-// 🛑 CRITICAL FIX: Changed 'localhost' to '10.0.2.2' for Android Emulator access.
-const API_BASE_URL = 'https://4f7abfb7d80b.ngrok-free.app/api'; 
+// --- Request and Response Types ---
+interface RegisterPayload {
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+  password_confirmation: string;
+  role: "passenger" | "driver";
+}
 
-// --- 1. Define Request and Response Types ---
+interface OtpPayload {
+  phone: string;
+  code: string; // ✅ Must match Laravel backend
+}
 
-// The structure of the data sent to the login endpoint
 interface LoginCredentials {
   email: string;
   password: string;
 }
 
-// The expected structure of the successful response from the Laravel API
-export interface LoginResponse {
-  token: string;
-  user: {
-    id: number;
-    name: string;
-    email: string;
-    role: 'client' | 'rider'; // Assuming roles are used for routing
-    // Add any other user fields you need
-  };
+export interface User {
+  id: number;
+  name: string;
+  email: string;
+  phone?: string;
+  role: "passenger" | "driver";
 }
 
-// --- 2. The Core Login Function ---
+export interface AuthResponse {
+  message?: string;
+  error?: string;
+  data?: any;
+}
 
-/**
- * Sends a POST request to the Laravel /api/login endpoint.
- * @param credentials - Object containing email and password.
- * @returns A promise that resolves with the LoginResponse data on success.
- * @throws An error if the request fails (e.g., network error or 401 unauthorized).
- */
-export const login = async (credentials: LoginCredentials): Promise<LoginResponse> => {
-  // NOTE: If API_BASE_URL already includes '/api', the URL here should be:
-  const url = `${API_BASE_URL}/login`; // This resolves to http://10.0.2.2:8000/api/login
+// --- Auth Functions ---
 
-  try {
-    // Axios handles the JSON serialization of the credentials object
-    const response = await axios.post<LoginResponse>(url, credentials);
-    
-    // Return the data directly from the response
-    return response.data;
-  } catch (error) {
-    // Re-throw the error so the calling component (LoginScreen) can handle it
-    throw error;
-  }
+// Register + send OTP
+export const register = async (formData: any) => {
+  const response = await axios.post(`${API_BASE_URL}/register`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data;
 };
 
-// --- 3. Example of another service function (Optional) ---
+// Verify OTP
+export const verifyOtp = async (payload: OtpPayload): Promise<AuthResponse> => {
+  const response = await axios.post(`${API_BASE_URL}/verify-otp`, payload);
+  return response.data as AuthResponse;
+};
 
-/**
- * You could add other authentication functions here, like register or logout.
- */
-// export const register = async (data: RegisterData): Promise<LoginResponse> => { ... };
+// Resend OTP
+export const resendOtp = async (phone: string): Promise<AuthResponse> => {
+  const response = await axios.post(`${API_BASE_URL}/resend-otp`, { phone });
+  return response.data;
+};
+
+// Login
+export const login = async (credentials: LoginCredentials): Promise<AuthResponse> => {
+  const response = await axios.post(`${API_BASE_URL}/login`, credentials);
+  return response.data;
+};
+
+// Logout
+export const logout = async (token: string) => {
+  return axios.post(
+    `${API_BASE_URL}/logout`,
+    {},
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+};

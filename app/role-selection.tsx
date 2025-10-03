@@ -11,7 +11,7 @@ export default function RoleSelectionScreen() {
   const handleRoleSelect = async (role: 'client' | 'rider') => {
     if (!role.trim()) return;
     await login(role);
-    router.replace(role === 'client' ? '/(client)' : '/(rider)');
+    router.replace(role === 'client' ? '/(client)/home' : '/(rider)/home');
   };
 
   return (

@@ -17,7 +17,7 @@ function RootLayoutNav() {
       <Stack.Screen name="role-selection" options={{ headerShown: false }} />
       <Stack.Screen name="(client)" options={{ headerShown: false }} />
       <Stack.Screen name="(rider)" options={{ headerShown: false }} />
-      <Stack.Screen name="modal" options={{ presentation: "modal" }} />
+      {/* <Stack.Screen name="modal" options={{ presentation: "modal" }} /> */}
     </Stack>
   );
 }

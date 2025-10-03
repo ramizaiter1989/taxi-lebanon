@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'r
 import { User, Star, Settings, LogOut, Shield, CreditCard } from 'lucide-react-native';
 import { useUser } from '@/hooks/user-store';
 import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ClientProfileScreen() {
   const { user, logout } = useUser();
@@ -14,7 +15,7 @@ export default function ClientProfileScreen() {
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Logout', onPress: async () => {
-          await logout();
+          await AsyncStorage.removeItem('token');
           router.replace('/role-selection');
         }}
       ]
