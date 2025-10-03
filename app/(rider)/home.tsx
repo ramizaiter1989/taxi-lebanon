@@ -110,7 +110,7 @@ export default function RiderHomeScreen() {
             dropoff={currentRide.dropoff}
             driverLocation={currentLocation}
             showRoute={true}
-            testID="rider-map"
+            
           />
           
           <View style={styles.mapOverlay}>

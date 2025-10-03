@@ -4,23 +4,41 @@ import { User, Star, Settings, LogOut, Shield, CreditCard } from 'lucide-react-n
 import { useUser } from '@/hooks/user-store';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 
 export default function ClientProfileScreen() {
   const { user, logout } = useUser();
 
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', onPress: async () => {
-          await AsyncStorage.removeItem('token');
-          router.replace('/role-selection');
-        }}
-      ]
-    );
-  };
+  Alert.alert(
+    'Logout',
+    'Are you sure you want to logout?',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      { 
+        text: 'Logout', 
+        onPress: async () => {
+          try {
+            const token = await AsyncStorage.getItem('token');
+            if (token) {
+              await axios.post(
+                'https://your-api-domain.com/api/logout',
+                {},
+                { headers: { Authorization: `Bearer ${token}` } }
+              );
+            }
+          } catch (error) {
+            console.log('Logout error:failed');
+          } finally {
+            await AsyncStorage.removeItem('token');
+            router.replace('/role-selection');
+          }
+        } 
+      }
+    ]
+  );
+};
+
 
   return (
     <SafeAreaView style={styles.container}>
