@@ -25,40 +25,41 @@ export default function RiderHomeScreen() {
   });
 
   // Track driver location
-  useEffect(() => {
-    let locationSubscription: LocationService.LocationSubscription | null = null;
+ useEffect(() => {
+  let locationSubscription: LocationService.LocationSubscription | null = null;
 
-    const startLocationTracking = async () => {
-      const { status } = await LocationService.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        console.log('Location permission denied');
-        return;
-      }
+  const startLocationTracking = async () => {
+    const { status } = await LocationService.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      console.log('Location permission denied');
+      return;
+    }
 
+    try {
       // Get initial location
       const location = await LocationService.getCurrentPositionAsync({});
       const coords = {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
-        address: 'Current Location'
+        address: 'Current Location',
       };
       setCurrentLocation(coords);
       setUserLocation({ lat: coords.latitude, lng: coords.longitude });
       updateDriverLocation(coords);
 
-      // Watch location changes if online
+      // Watch location changes if driver is online
       if (isDriverOnline) {
         locationSubscription = await LocationService.watchPositionAsync(
           {
             accuracy: LocationService.Accuracy.High,
-            timeInterval: 10000, // Update every 10 seconds
-            distanceInterval: 50, // Update every 50 meters
+            timeInterval: 10000,
+            distanceInterval: 50,
           },
           (location) => {
             const newCoords = {
               latitude: location.coords.latitude,
               longitude: location.coords.longitude,
-              address: 'Current Location'
+              address: 'Current Location',
             };
             setCurrentLocation(newCoords);
             setUserLocation({ lat: newCoords.latitude, lng: newCoords.longitude });
@@ -66,18 +67,20 @@ export default function RiderHomeScreen() {
           }
         );
       }
-    };
-
-    if (isDriverOnline) {
-      startLocationTracking();
+    } catch (error) {
+      console.error('Error getting location:', error);
     }
+  };
 
-    return () => {
-      if (locationSubscription) {
-        locationSubscription.remove();
-      }
-    };
-  }, [isDriverOnline, setUserLocation, updateDriverLocation]);
+  startLocationTracking();
+
+  return () => {
+    if (locationSubscription && typeof locationSubscription.remove === 'function') {
+      locationSubscription.remove();
+    }
+  };
+}, [isDriverOnline, setUserLocation, updateDriverLocation]);
+
 
   const handleToggleOnline = () => {
     toggleDriverOnline();
