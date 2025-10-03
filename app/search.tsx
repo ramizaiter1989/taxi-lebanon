@@ -1,279 +1,296 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
-  TextInput,
-  FlatList,
-  TouchableOpacity,
   Text,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
   ActivityIndicator,
-  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { X, Search as SearchIcon, MapPin, Clock, Navigation } from 'lucide-react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Search, MapPin, Navigation2, X, Route, Flag } from 'lucide-react-native';
+import { router } from 'expo-router';
 import { useMap } from '@/providers/MapProvider';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useQuery } from '@tanstack/react-query';
+
+interface SearchResult {
+  place_id: string;
+  display_name: string;
+  lat: string;
+  lon: string;
+  type: string;
+  importance: number;
+}
 
 export default function SearchScreen() {
-  const params = useLocalSearchParams();
-  const { mode } = params as { mode?: 'pickup' | 'dropoff' | 'place' };
-  
-  const { 
-    searchLocation, 
-    recentSearches, 
-    addToRecentSearches,
-    searchResultToMarker,
-    isSearching,
-    setSelectedPlace,
-    setRouteStart,
-    setRouteEnd
-  } = useMap();
+  const [searchQuery, setSearchQuery] = useState('');
+  const { setSelectedPlace, addMarker, isRoutingMode, routeStart, setRouteStart, setRouteEnd } = useMap();
 
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<any[]>([]);
-  const [hasSearched, setHasSearched] = useState(false);
+  const { data: searchResults, isLoading, refetch } = useQuery({
+    queryKey: ['search', searchQuery],
+    queryFn: async () => {
+      if (!searchQuery.trim()) return [];
+      
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=10`
+      );
+      
+      if (!response.ok) throw new Error('Search failed');
+      return response.json() as Promise<SearchResult[]>;
+    },
+    enabled: false,
+  });
 
-  // Debounced search
-  useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
-      setHasSearched(false);
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      const searchResults = await searchLocation(query);
-      setResults(searchResults);
-      setHasSearched(true);
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [query, searchLocation]);
-
-  const handleSelectResult = useCallback((result: any) => {
-    addToRecentSearches(result);
-    const marker = searchResultToMarker(result);
-
-    if (mode === 'pickup') {
-      setRouteStart(marker);
-      router.back();
-    } else if (mode === 'dropoff') {
-      setRouteEnd(marker);
-      router.back();
-    } else {
-      setSelectedPlace(marker);
-      router.push({
-        pathname: '/place-details',
-        params: {
-          id: marker.id,
-          title: marker.title,
-          description: marker.description,
-          lat: marker.lat.toString(),
-          lng: marker.lng.toString(),
-        }
-      });
-    }
-  }, [mode, addToRecentSearches, searchResultToMarker, setSelectedPlace, setRouteStart, setRouteEnd]);
-
-  const handleSelectRecent = useCallback((result: any) => {
-    setQuery(result.display_name);
-    handleSelectResult(result);
-  }, [handleSelectResult]);
-
-  const getTitle = () => {
-    switch(mode) {
-      case 'pickup': return 'Select Pickup Location';
-      case 'dropoff': return 'Select Dropoff Location';
-      default: return 'Search Places';
+  const handleSearch = () => {
+    if (searchQuery.trim()) {
+      refetch();
     }
   };
 
-  const renderResultItem = ({ item }: { item: any }) => (
-    <TouchableOpacity
-      style={styles.resultItem}
-      onPress={() => handleSelectResult(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.iconContainer}>
-        {mode === 'pickup' ? (
-          <MapPin size={20} color="#10b981" />
-        ) : mode === 'dropoff' ? (
-          <Navigation size={20} color="#ef4444" />
-        ) : (
-          <MapPin size={20} color="#6366f1" />
-        )}
-      </View>
-      <View style={styles.resultTextContainer}>
-        <Text style={styles.resultTitle} numberOfLines={1}>
-          {item.address?.road || item.type || 'Location'}
-        </Text>
-        <Text style={styles.resultSubtitle} numberOfLines={2}>
-          {item.display_name}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const selectPlace = (place: SearchResult) => {
+    const marker = {
+      id: place.place_id,
+      lat: parseFloat(place.lat),
+      lng: parseFloat(place.lon),
+      title: place.display_name.split(',')[0],
+      description: place.display_name,
+    };
+    
+    if (isRoutingMode) {
+      if (!routeStart) {
+        setRouteStart(marker);
+      } else {
+        setRouteEnd(marker);
+      }
+    } else {
+      addMarker(marker);
+      setSelectedPlace(marker);
+    }
+    router.back();
+  };
 
-  const renderRecentItem = ({ item }: { item: any }) => (
-    <TouchableOpacity
-      style={styles.resultItem}
-      onPress={() => handleSelectRecent(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.iconContainer}>
-        <Clock size={20} color="#9ca3af" />
-      </View>
-      <View style={styles.resultTextContainer}>
-        <Text style={styles.resultTitle} numberOfLines={1}>
-          {item.address?.road || item.type || 'Location'}
-        </Text>
-        <Text style={styles.resultSubtitle} numberOfLines={2}>
-          {item.display_name}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const renderSearchResult = ({ item }: { item: SearchResult }) => {
+    const [mainName, ...rest] = item.display_name.split(',');
+    const subtitle = rest.slice(0, 2).join(',').trim();
+    
+    return (
+      <TouchableOpacity
+        style={styles.resultItem}
+        onPress={() => selectPlace(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.resultIcon}>
+          <MapPin size={20} color="#007AFF" />
+        </View>
+        <View style={styles.resultContent}>
+          <Text style={styles.resultTitle} numberOfLines={1}>
+            {mainName}
+          </Text>
+          <Text style={styles.resultSubtitle} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        </View>
+        {isRoutingMode ? (
+          !routeStart ? (
+            <MapPin size={20} color="#FF5252" />
+          ) : (
+            <Flag size={20} color="#9C27B0" />
+          )
+        ) : (
+          <Navigation2 size={20} color="#999" />
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <X size={24} color="#1f2937" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{getTitle()}</Text>
-      </View>
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputWrapper}>
+            <Search size={20} color="#666" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search for a place..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onSubmitEditing={handleSearch}
+              autoFocus
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <X size={20} color="#999" />
+              </TouchableOpacity>
+            )}
+          </View>
+          <TouchableOpacity 
+            style={styles.searchButton}
+            onPress={handleSearch}
+            disabled={!searchQuery.trim()}
+          >
+            <Text style={styles.searchButtonText}>Search</Text>
+          </TouchableOpacity>
+        </View>
 
-      {/* Search Input */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchInputWrapper}>
-          <SearchIcon size={20} color="#9ca3af" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search for a location..."
-            placeholderTextColor="#9ca3af"
-            value={query}
-            onChangeText={setQuery}
-            autoFocus
-            returnKeyType="search"
-            onSubmitEditing={() => Keyboard.dismiss()}
-          />
-          {query.length > 0 && (
-            <TouchableOpacity onPress={() => setQuery('')}>
-              <X size={18} color="#9ca3af" />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#007AFF" />
+            <Text style={styles.loadingText}>Searching...</Text>
+          </View>
+        )}
 
-      {/* Results */}
-      {isSearching ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#6366f1" />
-          <Text style={styles.loadingText}>Searching...</Text>
-        </View>
-      ) : query.trim() && results.length === 0 && hasSearched ? (
-        <View style={styles.emptyContainer}>
-          <SearchIcon size={48} color="#d1d5db" />
-          <Text style={styles.emptyText}>No results found</Text>
-          <Text style={styles.emptySubtext}>
-            Try searching with different keywords
-          </Text>
-        </View>
-      ) : query.trim() && results.length > 0 ? (
-        <FlatList
-          data={results}
-          renderItem={renderResultItem}
-          keyExtractor={(item) => item.place_id}
-          style={styles.resultsList}
-          contentContainerStyle={styles.resultsContent}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          keyboardShouldPersistTaps="handled"
-        />
-      ) : recentSearches.length > 0 ? (
-        <View style={styles.recentContainer}>
-          <Text style={styles.recentTitle}>Recent Searches</Text>
+        {searchResults && searchResults.length === 0 && !isLoading && (
+          <View style={styles.emptyContainer}>
+            <MapPin size={48} color="#CCC" />
+            <Text style={styles.emptyText}>No results found</Text>
+            <Text style={styles.emptySubtext}>Try searching for a different location</Text>
+          </View>
+        )}
+
+        {searchResults && searchResults.length > 0 && (
           <FlatList
-            data={recentSearches}
-            renderItem={renderRecentItem}
+            data={searchResults}
             keyExtractor={(item) => item.place_id}
+            renderItem={renderSearchResult}
+            contentContainerStyle={styles.resultsList}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
-            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           />
-        </View>
-      ) : (
-        <View style={styles.emptyContainer}>
-          <MapPin size={48} color="#d1d5db" />
-          <Text style={styles.emptyText}>Search for places</Text>
-          <Text style={styles.emptySubtext}>
-            Find pickup, dropoff, or any location in Lebanon
-          </Text>
-        </View>
-      )}
-    </SafeAreaView>
+        )}
+
+        {!searchQuery && !searchResults && (
+          <View style={styles.suggestionsContainer}>
+            {isRoutingMode && (
+              <View style={styles.routeModeHeader}>
+                <Route size={20} color="#007AFF" />
+                <Text style={styles.routeModeText}>
+                  {!routeStart ? 'Select starting point' : 'Select destination'}
+                </Text>
+              </View>
+            )}
+            <Text style={styles.suggestionsTitle}>Popular Searches</Text>
+            {['New York', 'London', 'Paris', 'Tokyo', 'Sydney'].map((city) => {
+              if (!city || city.length > 50) return null;
+              const sanitizedCity = city.trim();
+              
+              return (
+                <TouchableOpacity
+                  key={sanitizedCity}
+                  style={styles.suggestionItem}
+                  onPress={() => {
+                    setSearchQuery(sanitizedCity);
+                    setTimeout(() => refetch(), 100);
+                  }}
+                >
+                  <MapPin size={16} color="#007AFF" />
+                  <Text style={styles.suggestionText}>{sanitizedCity}</Text>
+                </TouchableOpacity>
+              );
+            }).filter(Boolean)}
+          </View>
+        )}
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#F8F9FA',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
+  safeArea: {
+    flex: 1,
   },
   searchContainer: {
-    padding: 16,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  searchInputWrapper: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f3f4f6',
-    borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
     gap: 12,
+  },
+  searchInputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    gap: 8,
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: '#1f2937',
+    paddingVertical: 12,
+    color: '#333',
+  },
+  searchButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 10,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+  },
+  searchButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
   },
   loadingText: {
+    marginTop: 12,
     fontSize: 16,
-    color: '#6b7280',
+    color: '#666',
+  },
+  resultsList: {
+    paddingVertical: 8,
+  },
+  resultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  resultIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E3F2FD',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  resultContent: {
+    flex: 1,
+    marginRight: 12,
+  },
+  resultTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+    marginBottom: 2,
+  },
+  resultSubtitle: {
+    fontSize: 14,
+    color: '#666',
+  },
+  separator: {
+    height: 1,
+    backgroundColor: '#F0F0F0',
+    marginLeft: 68,
   },
   emptyContainer: {
     flex: 1,
@@ -284,65 +301,51 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1f2937',
+    color: '#333',
     marginTop: 16,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#666',
     marginTop: 8,
     textAlign: 'center',
   },
-  resultsList: {
-    flex: 1,
-  },
-  resultsContent: {
-    paddingVertical: 8,
-  },
-  resultItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  suggestionsContainer: {
     padding: 16,
-    backgroundColor: 'white',
-    gap: 12,
   },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f3f4f6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  resultTextContainer: {
-    flex: 1,
-  },
-  resultTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#1f2937',
-    marginBottom: 4,
-  },
-  resultSubtitle: {
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  separator: {
-    height: 1,
-    backgroundColor: '#f3f4f6',
-    marginLeft: 68,
-  },
-  recentContainer: {
-    flex: 1,
-  },
-  recentTitle: {
+  suggestionsTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#6b7280',
-    marginTop: 16,
-    marginBottom: 8,
-    marginLeft: 16,
+    color: '#666',
+    marginBottom: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    padding: 14,
+    borderRadius: 10,
+    marginBottom: 8,
+    gap: 12,
+  },
+  suggestionText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  routeModeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E3F2FD',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 8,
+  },
+  routeModeText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
   },
 });

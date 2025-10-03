@@ -1,14 +1,8 @@
 import { useState, useCallback, useMemo } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
+import * as Location from 'expo-location';
 
-export interface Location {
-  latitude: number;
-  longitude: number;
-  address: string;
-}
-
-export interface Marker {
+interface Marker {
   id: string;
   lat: number;
   lng: number;
@@ -16,32 +10,37 @@ export interface Marker {
   description: string;
 }
 
-export interface Route {
+interface Route {
   id: string;
   start: { lat: number; lng: number; title: string };
   end: { lat: number; lng: number; title: string };
-  coordinates: [number, number][]; // [lng, lat] format for GeoJSON
-  distance: number; // meters
-  duration: number; // seconds
+  coordinates: [number, number][];
+  distance: number;
+  duration: number;
 }
 
-export interface SearchResult {
-  place_id: string;
-  display_name: string;
-  lat: string;
-  lon: string;
-  type: string;
-  address?: {
-    road?: string;
-    city?: string;
-    country?: string;
-  };
+interface MapContextType {
+  markers: Marker[];
+  selectedPlace: Marker | null;
+  currentRoute: Route | null;
+  isRoutingMode: boolean;
+  routeStart: Marker | null;
+  routeEnd: Marker | null;
+  userLocation: { lat: number; lng: number } | null;
+  addMarker: (marker: Marker) => void;
+  removeMarker: (id: string) => void;
+  clearMarkers: () => void;
+  setSelectedPlace: (place: Marker | null) => void;
+  setRoutingMode: (enabled: boolean) => void;
+  setRouteStart: (marker: Marker | null) => void;
+  setRouteEnd: (marker: Marker | null) => void;
+  calculateRoute: () => Promise<void>;
+  clearRoute: () => void;
+  setUserLocation: (location: { lat: number; lng: number } | null) => void;
+  startRoutingFromCurrentLocation: () => Promise<void>;
 }
 
-const MARKERS_KEY = 'saved_markers';
-const RECENT_SEARCHES_KEY = 'recent_searches';
-
-export const [MapProvider, useMap] = createContextHook(() => {
+export const [MapProvider, useMap] = createContextHook<MapContextType>(() => {
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<Marker | null>(null);
   const [currentRoute, setCurrentRoute] = useState<Route | null>(null);
@@ -49,184 +48,100 @@ export const [MapProvider, useMap] = createContextHook(() => {
   const [routeStart, setRouteStart] = useState<Marker | null>(null);
   const [routeEnd, setRouteEnd] = useState<Marker | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [recentSearches, setRecentSearches] = useState<SearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
 
-  // Load saved data
-  const loadSavedData = useCallback(async () => {
-    try {
-      const [savedMarkers, savedSearches] = await Promise.all([
-        AsyncStorage.getItem(MARKERS_KEY),
-        AsyncStorage.getItem(RECENT_SEARCHES_KEY)
-      ]);
-      
-      if (savedMarkers) setMarkers(JSON.parse(savedMarkers));
-      if (savedSearches) setRecentSearches(JSON.parse(savedSearches));
-    } catch (error) {
-      console.error('Error loading saved data:', error);
-    }
-  }, []);
-
-  // Save markers
-  const saveMarkers = useCallback(async (newMarkers: Marker[]) => {
-    try {
-      await AsyncStorage.setItem(MARKERS_KEY, JSON.stringify(newMarkers));
-    } catch (error) {
-      console.error('Error saving markers:', error);
-    }
-  }, []);
-
-  // Add marker
   const addMarker = useCallback((marker: Marker) => {
     setMarkers(prev => {
-      const filtered = prev.filter(m => m.id !== marker.id);
-      const updated = [...filtered, marker];
-      saveMarkers(updated);
-      return updated;
+      const existing = prev.findIndex(m => m.id === marker.id);
+      if (existing >= 0) {
+        const updated = [...prev];
+        updated[existing] = marker;
+        return updated;
+      }
+      return [...prev, marker];
     });
-  }, [saveMarkers]);
+  }, []);
 
-  // Remove marker
   const removeMarker = useCallback((id: string) => {
-    setMarkers(prev => {
-      const updated = prev.filter(m => m.id !== id);
-      saveMarkers(updated);
-      return updated;
-    });
-  }, [saveMarkers]);
+    setMarkers(prev => prev.filter(m => m.id !== id));
+  }, []);
 
-  // Clear all markers
   const clearMarkers = useCallback(() => {
     setMarkers([]);
-    saveMarkers([]);
-  }, [saveMarkers]);
+    setSelectedPlace(null);
+  }, []);
 
-  // Search locations using Nominatim
-  const searchLocation = useCallback(async (query: string): Promise<SearchResult[]> => {
-    if (!query.trim()) return [];
-    
-    setIsSearching(true);
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?` +
-        `q=${encodeURIComponent(query)}&` +
-        `format=json&` +
-        `addressdetails=1&` +
-        `limit=10&` +
-        `countrycodes=lb` // Focus on Lebanon for ride-sharing app
-      );
-      
-      if (!response.ok) throw new Error('Search failed');
-      
-      const results: SearchResult[] = await response.json();
-      return results;
-    } catch (error) {
-      console.error('Search error:', error);
-      return [];
-    } finally {
-      setIsSearching(false);
+  const setRoutingMode = useCallback((enabled: boolean) => {
+    setIsRoutingMode(enabled);
+    if (!enabled) {
+      setRouteStart(null);
+      setRouteEnd(null);
+      setCurrentRoute(null);
     }
   }, []);
 
-  // Save to recent searches
-  const addToRecentSearches = useCallback(async (result: SearchResult) => {
-    const updated = [
-      result,
-      ...recentSearches.filter(r => r.place_id !== result.place_id)
-    ].slice(0, 10); // Keep only 10 recent
-    
-    setRecentSearches(updated);
+  const startRoutingFromCurrentLocation = useCallback(async () => {
     try {
-      await AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
-    } catch (error) {
-      console.error('Error saving recent search:', error);
-    }
-  }, [recentSearches]);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('Location permission denied');
+        return;
+      }
 
-  // Calculate route using ORS
-  const calculateRoute = useCallback(async (apiKey: string) => {
+      const location = await Location.getCurrentPositionAsync({});
+      const currentLocationMarker: Marker = {
+        id: 'current-location',
+        lat: location.coords.latitude,
+        lng: location.coords.longitude,
+        title: 'Current Location',
+        description: 'Your current location'
+      };
+      
+      setUserLocation({
+        lat: location.coords.latitude,
+        lng: location.coords.longitude
+      });
+      
+      setRouteStart(currentLocationMarker);
+      setIsRoutingMode(true);
+    } catch (error) {
+      console.error('Error getting current location:', error);
+    }
+  }, []);
+
+  const calculateRoute = useCallback(async () => {
     if (!routeStart || !routeEnd) return;
 
     try {
       const response = await fetch(
-        'https://api.openrouteservice.org/v2/directions/driving-car',
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': apiKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            coordinates: [
-              [routeStart.lng, routeStart.lat],
-              [routeEnd.lng, routeEnd.lat]
-            ],
-            preference: 'fastest'
-          })
-        }
+        `https://router.project-osrm.org/route/v1/driving/${routeStart.lng},${routeStart.lat};${routeEnd.lng},${routeEnd.lat}?overview=full&geometries=geojson`
       );
-
+      
       if (!response.ok) throw new Error('Route calculation failed');
-
+      
       const data = await response.json();
+      
       if (data.routes && data.routes.length > 0) {
         const route = data.routes[0];
         const newRoute: Route = {
           id: Date.now().toString(),
-          start: { 
-            lat: routeStart.lat, 
-            lng: routeStart.lng, 
-            title: routeStart.title 
-          },
-          end: { 
-            lat: routeEnd.lat, 
-            lng: routeEnd.lng, 
-            title: routeEnd.title 
-          },
+          start: { lat: routeStart.lat, lng: routeStart.lng, title: routeStart.title },
+          end: { lat: routeEnd.lat, lng: routeEnd.lng, title: routeEnd.title },
           coordinates: route.geometry.coordinates,
-          distance: route.summary.distance,
-          duration: route.summary.duration,
+          distance: route.distance,
+          duration: route.duration,
         };
         setCurrentRoute(newRoute);
-        return newRoute;
       }
     } catch (error) {
       console.error('Error calculating route:', error);
-      throw error;
     }
   }, [routeStart, routeEnd]);
 
-  // Clear route
   const clearRoute = useCallback(() => {
     setCurrentRoute(null);
     setRouteStart(null);
     setRouteEnd(null);
     setIsRoutingMode(false);
-  }, []);
-
-  // Start routing from current location
-  const startRoutingFromCurrentLocation = useCallback(() => {
-    if (!userLocation) return;
-    
-    setIsRoutingMode(true);
-    setRouteStart({
-      id: 'user_location',
-      lat: userLocation.lat,
-      lng: userLocation.lng,
-      title: 'Current Location',
-      description: 'Your current position'
-    });
-  }, [userLocation]);
-
-  // Convert search result to marker
-  const searchResultToMarker = useCallback((result: SearchResult): Marker => {
-    return {
-      id: result.place_id,
-      lat: parseFloat(result.lat),
-      lng: parseFloat(result.lon),
-      title: result.address?.road || result.type || 'Location',
-      description: result.display_name
-    };
   }, []);
 
   return useMemo(() => ({
@@ -237,42 +152,16 @@ export const [MapProvider, useMap] = createContextHook(() => {
     routeStart,
     routeEnd,
     userLocation,
-    recentSearches,
-    isSearching,
     addMarker,
     removeMarker,
     clearMarkers,
     setSelectedPlace,
-    setRoutingMode: setIsRoutingMode,
+    setRoutingMode,
     setRouteStart,
     setRouteEnd,
     calculateRoute,
     clearRoute,
     setUserLocation,
     startRoutingFromCurrentLocation,
-    searchLocation,
-    addToRecentSearches,
-    searchResultToMarker,
-    loadSavedData
-  }), [
-    markers,
-    selectedPlace,
-    currentRoute,
-    isRoutingMode,
-    routeStart,
-    routeEnd,
-    userLocation,
-    recentSearches,
-    isSearching,
-    addMarker,
-    removeMarker,
-    clearMarkers,
-    calculateRoute,
-    clearRoute,
-    startRoutingFromCurrentLocation,
-    searchLocation,
-    addToRecentSearches,
-    searchResultToMarker,
-    loadSavedData
-  ]);
+  }), [markers, selectedPlace, currentRoute, isRoutingMode, routeStart, routeEnd, userLocation, addMarker, removeMarker, clearMarkers, setSelectedPlace, setRoutingMode, setRouteStart, setRouteEnd, calculateRoute, clearRoute, setUserLocation, startRoutingFromCurrentLocation]);
 });
