@@ -1,22 +1,56 @@
-// app/(client)/_layout.tsx
-import React, { ReactNode } from 'react';
-import { UserProvider } from '@/providers/UserProvider';
-import { MapProvider } from '@/providers/MapProvider';
-import { Stack } from 'expo-router';
+import React from 'react';
+import { Tabs } from 'expo-router';
+import { Home, Clock, User, Shield } from 'lucide-react-native';
 
-type ClientLayoutProps = {
-  children: ReactNode;
-};
-
-export default function ClientLayout({ children }: ClientLayoutProps) {
+export default function ClientTabsLayout() {
   return (
-    <UserProvider>
-      <MapProvider>
-        {/* Stack wrapper allows nested navigation inside client */}
-        <Stack>
-          {children}
-        </Stack>
-      </MapProvider>
-    </UserProvider>
+    <Tabs
+      screenOptions={{
+        tabBarActiveTintColor: '#6366f1',
+        tabBarInactiveTintColor: '#9ca3af',
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: 'white',
+          borderTopWidth: 1,
+          borderTopColor: '#f3f4f6',
+          paddingBottom: 8,
+          paddingTop: 8,
+          height: 88,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600',
+        },
+      }}
+    >
+      <Tabs.Screen
+        name="home"
+        options={{
+          title: 'Book Ride',
+          tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="history"
+        options={{
+          title: 'History',
+          tabBarIcon: ({ color, size }) => <Clock color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="safety"
+        options={{
+          title: 'Safety',
+          tabBarIcon: ({ color, size }) => <Shield color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color, size }) => <User color={color} size={size} />,
+        }}
+      />
+    </Tabs>
   );
 }

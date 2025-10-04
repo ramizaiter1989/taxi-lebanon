@@ -339,6 +339,111 @@ export default function ClientHome() {
     
     return (
     <View style={styles.container}>
+      <View style={styles.overlay}>
+  <View style={styles.headerRow}>
+    {/* Search Bar */}
+    <TouchableOpacity 
+      style={styles.searchBar}
+      onPress={() => router.push('/search')}
+    >
+      <LinearGradient colors={['#FFFFFF', '#F8F9FA']} style={styles.searchGradient}>
+        <Search size={20} color="#666" />
+        <Text style={styles.searchPlaceholder}>Search places...</Text>
+      </LinearGradient>
+    </TouchableOpacity>
+
+    {/* Profile Button */}
+    <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
+      <LinearGradient colors={['#007AFF', '#0051D5']} style={styles.profileGradient}>
+        <User size={20} color="white" />
+      </LinearGradient>
+    </TouchableOpacity>
+  </View>
+  <View style={styles.controlsRight}>
+    <TouchableOpacity style={styles.controlButton} onPress={zoomIn}>
+      <Plus size={24} color="#333" />
+    </TouchableOpacity>
+    <TouchableOpacity style={styles.controlButton} onPress={zoomOut}>
+      <Minus size={24} color="#333" />
+    </TouchableOpacity>
+
+    <View style={styles.divider} />
+
+    <TouchableOpacity style={styles.controlButton} onPress={centerOnUser}>
+      <Navigation size={24} color="#007AFF" />
+    </TouchableOpacity>
+
+    <TouchableOpacity style={styles.controlButton} onPress={() => setShowLayerMenu(!showLayerMenu)}>
+      <Layers size={24} color="#333" />
+    </TouchableOpacity>
+  </View>
+  {isRoutingMode && (
+    <View style={styles.routeControls}>
+      <View style={styles.routeInfo}>
+        <View style={styles.routeStep}>
+          <View style={[styles.routeStepIcon, { backgroundColor: routeStart ? '#FF5252' : '#E0E0E0' }]}>
+            <MapPin size={16} color="white" />
+          </View>
+          <Text style={styles.routeStepText}>{routeStart ? routeStart.title : 'Tap map for start'}</Text>
+        </View>
+        <View style={styles.routeStep}>
+          <View style={[styles.routeStepIcon, { backgroundColor: routeEnd ? '#9C27B0' : '#E0E0E0' }]}>
+            <Flag size={16} color="white" />
+          </View>
+          <Text style={styles.routeStepText}>{routeEnd ? routeEnd.title : 'Tap map for destination'}</Text>
+        </View>
+      </View>
+      {currentRoute && (
+        <View style={styles.routeStats}>
+          <Text style={styles.routeDistance}>{(currentRoute.distance / 1000).toFixed(1)} km</Text>
+          <Text style={styles.routeDuration}>{Math.round(currentRoute.duration / 60)} min</Text>
+        </View>
+      )}
+    </View>
+  )}
+  <View style={styles.bottomActions}>
+    {!isRoutingMode ? (
+      <View style={styles.actionRow}>
+        <TouchableOpacity style={styles.actionButton} onPress={startRoutingFromCurrentLocation}>
+          <LinearGradient colors={['#007AFF', '#0051D5']} style={styles.actionGradient}>
+            <Route size={20} color="white" />
+            <Text style={styles.actionText}>Navigate from Here</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.actionButton} onPress={() => setRoutingMode(true)}>
+          <LinearGradient colors={['#34C759', '#28A745']} style={styles.actionGradient}>
+            <MapPin size={20} color="white" />
+            <Text style={styles.actionText}>Custom Route</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.actionButton} onPress={() => {
+          clearMarkers();
+          webViewRef.current?.postMessage(JSON.stringify({ type: 'clearMarkers' }));
+        }}>
+          <LinearGradient colors={['#FF6B6B', '#FF5252']} style={styles.actionGradient}>
+            <X size={20} color="white" />
+            <Text style={styles.actionText}>Clear</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    ) : (
+      <View style={styles.actionRow}>
+        <TouchableOpacity style={styles.actionButton} onPress={() => {
+          clearRoute();
+          webViewRef.current?.postMessage(JSON.stringify({ type: 'clearRoute' }));
+        }}>
+          <LinearGradient colors={['#FF6B6B', '#FF5252']} style={styles.actionGradient}>
+            <X size={20} color="white" />
+            <Text style={styles.actionText}>Cancel Route</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    )}
+  </View>
+</View> {/* end of overlay */}
+
       <WebView
         ref={webViewRef}
         source={{ html: mapHTML }}
@@ -351,6 +456,7 @@ export default function ClientHome() {
         javaScriptEnabled
         domStorageEnabled
       />
+      
 
       {isLoading && (
         <View style={styles.loadingContainer}>
@@ -362,6 +468,7 @@ export default function ClientHome() {
       {/* Render your overlay controls, bottom buttons, and layer menu */}
       {/* You can reuse all your previous styles and JSX for header, controls, route actions */}
     </View>
+    
   );
 }
 
