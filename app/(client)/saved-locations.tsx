@@ -8,6 +8,7 @@ import {
   Modal,
   TextInput,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -17,7 +18,6 @@ import {
   MapPin,
   Plus,
   Trash2,
-  Edit,
   X,
   Check,
 } from 'lucide-react-native';
@@ -29,7 +29,6 @@ export default function SavedLocationsScreen() {
   const router = useRouter();
   const { savedLocations, addSavedLocation, removeSavedLocation } = useMap();
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editingLocation, setEditingLocation] = useState<SavedLocation | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     address: '',
@@ -44,10 +43,10 @@ export default function SavedLocationsScreen() {
 
     const newLocation: SavedLocation = {
       id: Date.now().toString(),
-      name: formData.name,
-      address: formData.address,
-      lat: 0, // In real app, geocode the address
-      lng: 0,
+      name: formData.name.trim(),
+      address: formData.address.trim(),
+      lat: 33.8886, // Beirut default lat
+      lng: 35.4955, // Beirut default lng
       type: formData.type,
     };
 
@@ -74,7 +73,6 @@ export default function SavedLocationsScreen() {
 
   const resetForm = () => {
     setFormData({ name: '', address: '', type: 'custom' });
-    setEditingLocation(null);
   };
 
   const getLocationIcon = (type: string) => {
@@ -147,7 +145,7 @@ export default function SavedLocationsScreen() {
       {/* Add Location Modal */}
       <Modal visible={showAddModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <SafeAreaView style={styles.modalContent} edges={['bottom']}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Add Saved Location</Text>
               <TouchableOpacity
@@ -160,7 +158,7 @@ export default function SavedLocationsScreen() {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.form}>
+            <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Location Type</Text>
                 <View style={styles.typeOptions}>
@@ -170,6 +168,7 @@ export default function SavedLocationsScreen() {
                       formData.type === 'home' && styles.typeOptionActive,
                     ]}
                     onPress={() => setFormData({ ...formData, type: 'home' })}
+                    activeOpacity={0.7}
                   >
                     <Home
                       size={20}
@@ -191,6 +190,7 @@ export default function SavedLocationsScreen() {
                       formData.type === 'work' && styles.typeOptionActive,
                     ]}
                     onPress={() => setFormData({ ...formData, type: 'work' })}
+                    activeOpacity={0.7}
                   >
                     <Briefcase
                       size={20}
@@ -212,6 +212,7 @@ export default function SavedLocationsScreen() {
                       formData.type === 'custom' && styles.typeOptionActive,
                     ]}
                     onPress={() => setFormData({ ...formData, type: 'custom' })}
+                    activeOpacity={0.7}
                   >
                     <MapPin
                       size={20}
@@ -234,10 +235,12 @@ export default function SavedLocationsScreen() {
                 <TextInput
                   style={styles.input}
                   placeholder="e.g., Home, Office, Gym"
+                  placeholderTextColor="#999"
                   value={formData.name}
                   onChangeText={(text) =>
                     setFormData({ ...formData, name: text })
                   }
+                  maxLength={50}
                 />
               </View>
 
@@ -245,16 +248,21 @@ export default function SavedLocationsScreen() {
                 <Text style={styles.label}>Address</Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
-                  placeholder="Enter full address"
+                  placeholder="Enter full address in Lebanon"
+                  placeholderTextColor="#999"
                   value={formData.address}
                   onChangeText={(text) =>
                     setFormData({ ...formData, address: text })
                   }
                   multiline
                   numberOfLines={3}
+                  textAlignVertical="top"
+                  maxLength={200}
                 />
               </View>
+            </ScrollView>
 
+            <View style={styles.modalFooter}>
               <TouchableOpacity
                 style={styles.saveButton}
                 onPress={handleAddLocation}
@@ -268,7 +276,7 @@ export default function SavedLocationsScreen() {
                 </LinearGradient>
               </TouchableOpacity>
             </View>
-          </View>
+          </SafeAreaView>
         </View>
       </Modal>
     </SafeAreaView>
@@ -355,6 +363,7 @@ const styles = StyleSheet.create({
   locationAddress: {
     fontSize: 14,
     color: '#666',
+    lineHeight: 20,
   },
   deleteButton: {
     padding: 8,
@@ -393,7 +402,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingBottom: 40,
+    maxHeight: '85%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -408,17 +417,18 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
-  form: {
+  formContainer: {
+    flex: 1,
     padding: 20,
   },
   formGroup: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   label: {
     fontSize: 14,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   typeOptions: {
     flexDirection: 'row',
@@ -426,10 +436,9 @@ const styles = StyleSheet.create({
   },
   typeOption: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
+    padding: 14,
     borderRadius: 10,
     backgroundColor: '#F5F5F5',
     borderWidth: 2,
@@ -441,7 +450,7 @@ const styles = StyleSheet.create({
     borderColor: '#007AFF',
   },
   typeText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#666',
     fontWeight: '500',
   },
@@ -455,10 +464,17 @@ const styles = StyleSheet.create({
     padding: 14,
     fontSize: 16,
     color: '#333',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
   textArea: {
-    height: 80,
-    textAlignVertical: 'top',
+    height: 100,
+    paddingTop: 14,
+  },
+  modalFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
   },
   saveButton: {
     borderRadius: 12,
@@ -467,7 +483,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 5,
-    marginTop: 10,
   },
   saveGradient: {
     flexDirection: 'row',

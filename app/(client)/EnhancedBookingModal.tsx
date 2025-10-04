@@ -11,42 +11,37 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  MapPin,
-  Flag,
   Navigation,
   Clock,
-  DollarSign,
   Check,
   X,
   CreditCard,
   Wallet,
   Banknote,
   Tag,
-  Home,
-  Briefcase,
-  Plus,
-  ChevronRight,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useMap, VEHICLE_OPTIONS, VehicleType, PaymentMethod } from '@/providers/MapProvider';
+import { useMap, VEHICLE_OPTIONS } from '@/providers/MapProvider';
 
-export default function EnhancedBookingModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+interface EnhancedBookingModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}
+
+export default function EnhancedBookingModal({ visible, onClose, onConfirm }: EnhancedBookingModalProps) {
   const {
     rideBooking,
     selectedVehicleType,
     selectedPaymentMethod,
-    savedLocations,
     promoCode,
     setVehicleType,
     setPaymentMethod,
     applyPromoCode,
-    confirmRideBooking,
-    cancelRideBooking,
   } = useMap();
 
   const [promoInput, setPromoInput] = useState('');
   const [promoError, setPromoError] = useState('');
-  const [showSavedLocations, setShowSavedLocations] = useState(false);
 
   const handleApplyPromo = () => {
     if (!promoInput.trim()) {
@@ -55,18 +50,11 @@ export default function EnhancedBookingModal({ visible, onClose }: { visible: bo
     }
     applyPromoCode(promoInput.toUpperCase());
     setPromoError('');
-    Alert.alert('Promo Applied!', 'Your discount has been applied.');
+    Alert.alert('Success', 'Promo code applied!');
   };
 
   const handleConfirm = () => {
-    confirmRideBooking();
-    onClose();
-    Alert.alert('Ride Confirmed!', 'Searching for nearby drivers...');
-  };
-
-  const handleCancel = () => {
-    cancelRideBooking();
-    onClose();
+    onConfirm();
   };
 
   if (!rideBooking) return null;
@@ -79,7 +67,7 @@ export default function EnhancedBookingModal({ visible, onClose }: { visible: bo
         <SafeAreaView style={styles.modalContainer} edges={['bottom']}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Confirm Your Ride</Text>
-            <TouchableOpacity onPress={handleCancel} style={styles.closeButton}>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
               <X size={24} color="#666" />
             </TouchableOpacity>
           </View>
@@ -140,6 +128,7 @@ export default function EnhancedBookingModal({ visible, onClose }: { visible: bo
                       key={vehicle.id}
                       style={[styles.vehicleCard, isSelected && styles.vehicleCardSelected]}
                       onPress={() => setVehicleType(vehicle.id)}
+                      activeOpacity={0.7}
                     >
                       {isSelected && (
                         <View style={styles.selectedBadge}>
@@ -169,6 +158,7 @@ export default function EnhancedBookingModal({ visible, onClose }: { visible: bo
                     selectedPaymentMethod === 'cash' && styles.paymentOptionSelected
                   ]}
                   onPress={() => setPaymentMethod('cash')}
+                  activeOpacity={0.7}
                 >
                   <Banknote size={24} color={selectedPaymentMethod === 'cash' ? '#007AFF' : '#666'} />
                   <Text style={[
@@ -186,6 +176,7 @@ export default function EnhancedBookingModal({ visible, onClose }: { visible: bo
                     selectedPaymentMethod === 'card' && styles.paymentOptionSelected
                   ]}
                   onPress={() => setPaymentMethod('card')}
+                  activeOpacity={0.7}
                 >
                   <CreditCard size={24} color={selectedPaymentMethod === 'card' ? '#007AFF' : '#666'} />
                   <Text style={[
@@ -203,6 +194,7 @@ export default function EnhancedBookingModal({ visible, onClose }: { visible: bo
                     selectedPaymentMethod === 'wallet' && styles.paymentOptionSelected
                   ]}
                   onPress={() => setPaymentMethod('wallet')}
+                  activeOpacity={0.7}
                 >
                   <Wallet size={24} color={selectedPaymentMethod === 'wallet' ? '#007AFF' : '#666'} />
                   <Text style={[
@@ -289,10 +281,10 @@ export default function EnhancedBookingModal({ visible, onClose }: { visible: bo
 
           {/* Bottom Actions */}
           <View style={styles.bottomActions}>
-            <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
+            <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
+            <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm} activeOpacity={0.8}>
               <LinearGradient colors={['#34C759', '#28A745']} style={styles.confirmGradient}>
                 <Check size={20} color="white" />
                 <Text style={styles.confirmButtonText}>

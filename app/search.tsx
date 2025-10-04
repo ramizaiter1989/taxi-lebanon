@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -27,6 +27,8 @@ interface SearchResult {
 
 export default function SearchScreen() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  
   const { 
     setSelectedPlace, 
     addMarker, 
@@ -37,26 +39,37 @@ export default function SearchScreen() {
     setRouteEnd 
   } = useMap();
 
-  const { data: searchResults, isLoading, refetch } = useQuery({
-    queryKey: ['search', searchQuery],
+  // Debounce search query for live predictions
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const { data: searchResults, isLoading } = useQuery({
+    queryKey: ['search', debouncedQuery],
     queryFn: async () => {
-      if (!searchQuery.trim()) return [];
+      if (!debouncedQuery.trim()) return [];
       
+      // Focus on Lebanon by adding country code and bounding box
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=10`
+        `https://nominatim.openstreetmap.org/search?` +
+        `format=json` +
+        `&q=${encodeURIComponent(debouncedQuery)}` +
+        `&countrycodes=lb` + // Lebanon country code
+        `&viewbox=35.1,34.4,36.6,33.0` + // Lebanon bounding box (lon_min,lat_max,lon_max,lat_min)
+        `&bounded=1` + // Restrict to bounding box
+        `&limit=10` +
+        `&addressdetails=1`
       );
       
       if (!response.ok) throw new Error('Search failed');
       return response.json() as Promise<SearchResult[]>;
     },
-    enabled: false,
+    enabled: debouncedQuery.trim().length > 0,
   });
-
-  const handleSearch = () => {
-    if (searchQuery.trim()) {
-      refetch();
-    }
-  };
 
   const selectPlace = (place: SearchResult) => {
     const marker = {
@@ -114,6 +127,20 @@ export default function SearchScreen() {
     );
   };
 
+  // Popular Lebanese locations for quick search
+  const popularPlaces = [
+    'Hamra, Beirut',
+    'Downtown Beirut',
+    'Jounieh',
+    'Byblos',
+    'Tripoli',
+    'Batroun',
+    'Beirut Airport',
+    'AUB',
+    'ABC Mall',
+    'City Mall',
+  ];
+
   return (
     <KeyboardAvoidingView 
       style={styles.container}
@@ -135,11 +162,10 @@ export default function SearchScreen() {
               placeholder={
                 isBookingMode 
                   ? (!routeStart ? 'Search pickup location...' : 'Search destination...')
-                  : 'Search for a place...'
+                  : 'Search for a place in Lebanon...'
               }
               value={searchQuery}
               onChangeText={setSearchQuery}
-              onSubmitEditing={handleSearch}
               autoFocus
               returnKeyType="search"
             />
@@ -161,7 +187,7 @@ export default function SearchScreen() {
         {searchResults && searchResults.length === 0 && !isLoading && searchQuery.trim() && (
           <View style={styles.emptyContainer}>
             <MapPin size={48} color="#CCC" />
-            <Text style={styles.emptyText}>No results found</Text>
+            <Text style={styles.emptyText}>No results found in Lebanon</Text>
             <Text style={styles.emptySubtext}>Try searching for a different location</Text>
           </View>
         )}
@@ -187,25 +213,20 @@ export default function SearchScreen() {
                 </Text>
               </View>
             )}
-            <Text style={styles.suggestionsTitle}>Quick Search</Text>
-            {['Restaurant', 'Coffee Shop', 'Park', 'Hospital', 'ATM'].map((place) => {
-              if (!place || place.length > 50) return null;
-              const sanitizedPlace = place.trim();
-              
-              return (
-                <TouchableOpacity
-                  key={sanitizedPlace}
-                  style={styles.suggestionItem}
-                  onPress={() => {
-                    setSearchQuery(sanitizedPlace);
-                    setTimeout(() => refetch(), 100);
-                  }}
-                >
-                  <MapPin size={16} color="#007AFF" />
-                  <Text style={styles.suggestionText}>{sanitizedPlace}</Text>
-                </TouchableOpacity>
-              );
-            }).filter(Boolean)}
+            <Text style={styles.suggestionsTitle}>Popular Places in Lebanon</Text>
+            {popularPlaces.map((place) => (
+              <TouchableOpacity
+                key={place}
+                style={styles.suggestionItem}
+                onPress={() => {
+                  setSearchQuery(place);
+                }}
+                activeOpacity={0.7}
+              >
+                <MapPin size={16} color="#007AFF" />
+                <Text style={styles.suggestionText}>{place}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         )}
       </SafeAreaView>
@@ -337,6 +358,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 8,
     gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   suggestionText: {
     fontSize: 16,

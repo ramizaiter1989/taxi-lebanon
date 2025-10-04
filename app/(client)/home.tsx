@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   Text,
   ActivityIndicator,
-  Modal,
+  Alert,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { 
@@ -21,10 +21,6 @@ import {
   MapPin,
   Flag,
   User,
-  Car,
-  Clock,
-  DollarSign,
-  Check,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
@@ -32,15 +28,14 @@ import { useMap } from '@/providers/MapProvider';
 import { useUser } from '@/hooks/user-store';
 import { LinearGradient } from 'expo-linear-gradient';
 
-export default function ClientHome() {
+export default function ClientHomeScreen() {
   const router = useRouter();
   const webViewRef = useRef<WebView>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [localUserLocation, setLocalUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [mapLayer, setMapLayer] = useState<'street' | 'satellite' | 'terrain'>('street');
   const [showLayerMenu, setShowLayerMenu] = useState(false);
-  const [showBookingConfirm, setShowBookingConfirm] = useState(false);
-  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [hasActiveRide, setHasActiveRide] = useState(false);
 
   const { user } = useUser();
   const { 
@@ -61,18 +56,42 @@ export default function ClientHome() {
     cancelRideBooking,
   } = useMap();
 
-  // Get current location
+  // Get current location and center map immediately
   useEffect(() => {
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Required', 'Location permission is required to use this app.');
+          // Default to Beirut center if permission denied
+          const defaultCoords = { lat: 33.8886, lng: 35.4955 };
+          setLocalUserLocation(defaultCoords);
+          setUserLocation(defaultCoords);
+          return;
+        }
 
-      const location = await Location.getCurrentPositionAsync({});
-      const coords = { lat: location.coords.latitude, lng: location.coords.longitude };
-      setLocalUserLocation(coords);
-      setUserLocation(coords);
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+        const coords = { lat: location.coords.latitude, lng: location.coords.longitude };
+        setLocalUserLocation(coords);
+        setUserLocation(coords);
 
-      webViewRef.current?.postMessage(JSON.stringify({ type: 'setView', ...coords, zoom: 15 }));
+        // Center map on user location immediately after getting coordinates
+        if (webViewRef.current) {
+          webViewRef.current.postMessage(JSON.stringify({ 
+            type: 'setView', 
+            ...coords, 
+            zoom: 15 
+          }));
+        }
+      } catch (error) {
+        console.error('Error getting location:', error);
+        // Fallback to Beirut center
+        const defaultCoords = { lat: 33.8886, lng: 35.4955 };
+        setLocalUserLocation(defaultCoords);
+        setUserLocation(defaultCoords);
+      }
     })();
   }, [setUserLocation]);
 
@@ -89,7 +108,6 @@ export default function ClientHome() {
     if (currentRoute && webViewRef.current) {
       webViewRef.current.postMessage(JSON.stringify({ type: 'showRoute', route: currentRoute }));
       
-      // Add route markers
       if (routeStart) {
         webViewRef.current.postMessage(JSON.stringify({ 
           type: 'addRouteMarker', 
@@ -107,19 +125,12 @@ export default function ClientHome() {
     }
   }, [currentRoute, routeStart, routeEnd]);
 
-  // Trigger route calculation when both points are set
+  // Auto-calculate route when both points are set
   useEffect(() => {
-    if (routeStart && routeEnd && isBookingMode) {
+    if (routeStart && routeEnd && isBookingMode && !currentRoute) {
       calculateRoute();
     }
-  }, [routeStart, routeEnd, isBookingMode, calculateRoute]);
-
-  // Show booking confirmation modal when route is ready
-  useEffect(() => {
-    if (rideBooking) {
-      setShowBookingConfirm(true);
-    }
-  }, [rideBooking]);
+  }, [routeStart, routeEnd, isBookingMode, currentRoute, calculateRoute]);
 
   // Handle map messages
   const handleMapMessage = (event: any) => {
@@ -147,24 +158,37 @@ export default function ClientHome() {
     }
   };
 
-  const handleConfirmBooking = () => {
-    if (rideBooking) {
-      setShowBookingConfirm(false);
-      confirmRideBooking();
-      
-      // Navigate to a confirmation/waiting screen
-      // You can create this screen later
-      alert(`Ride booked! Fare: ${rideBooking.baseFare.toLocaleString()} LBP`);
-      
-      // For now, just clear the booking
-      handleCancelBooking();
+  const handleStartBooking = () => {
+    if (hasActiveRide) {
+      Alert.alert(
+        'Active Ride',
+        'You already have an active ride. Please complete or cancel it before booking another.',
+        [{ text: 'OK' }]
+      );
+      return;
     }
+    startRideBooking();
   };
 
   const handleCancelBooking = () => {
-    setShowBookingConfirm(false);
     cancelRideBooking();
     webViewRef.current?.postMessage(JSON.stringify({ type: 'clearRoute' }));
+  };
+
+  const handleConfirmBooking = () => {
+    setHasActiveRide(true);
+    confirmRideBooking();
+    // Navigate to active ride screen or show confirmation
+    Alert.alert(
+      'Ride Confirmed!',
+      'Searching for nearby drivers...',
+      [
+        {
+          text: 'OK',
+          onPress: () => router.push('/active-ride')
+        }
+      ]
+    );
   };
 
   const centerOnUser = () => {
@@ -181,8 +205,6 @@ export default function ClientHome() {
     webViewRef.current?.postMessage(JSON.stringify({ type: 'changeLayer', layer }));
     setShowLayerMenu(false);
   };
-
-  
 
   return (
     <View style={styles.container}>
@@ -254,7 +276,7 @@ export default function ClientHome() {
           </View>
         )}
 
-        {isBookingMode && !showBookingConfirm && (
+        {isBookingMode && !rideBooking && (
           <View style={styles.routeControls}>
             <View style={styles.routeInfo}>
               <View style={styles.routeStep}>
@@ -285,15 +307,14 @@ export default function ClientHome() {
           </View>
         )}
 
-        {!isBookingMode && (
+        {!isBookingMode && !hasActiveRide && (
           <View style={styles.bottomActions}>
             <TouchableOpacity 
               style={styles.bookRideButton}
-              onPress={startRideBooking}
+              onPress={handleStartBooking}
             >
               <LinearGradient colors={['#007AFF', '#0051D5']} style={styles.bookRideGradient}>
-                <Car size={24} color="white" />
-                <Text style={styles.bookRideText}>Book a Ride</Text>
+                <Text style={styles.bookRideText}>Where to?</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -326,33 +347,35 @@ export default function ClientHome() {
       )}
 
       <EnhancedBookingModal 
-  visible={showBookingModal} 
-  onClose={() => setShowBookingModal(false)} 
-/>
+        visible={!!rideBooking}
+        onClose={handleCancelBooking}
+        onConfirm={handleConfirmBooking}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
- container: {
-  flex: 1,
-  position: 'relative', // to make zIndex work properly
-  backgroundColor: '#fff',
-},
-overlay: {
-  ...StyleSheet.absoluteFillObject,
-  zIndex: 1, // ensure it's on top
-  pointerEvents: 'box-none',
-},
+  container: {
+    flex: 1,
+    position: 'relative',
+    backgroundColor: '#fff',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
+    pointerEvents: 'box-none',
+  },
   map: {
-  ...StyleSheet.absoluteFillObject,
-  zIndex: -1,
-},
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
+  },
   loadingContainer: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 999,
   },
   loadingText: {
     marginTop: 12,
@@ -363,7 +386,7 @@ overlay: {
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 16,
-    marginTop: 12,
+    marginTop: 60,
     gap: 12,
   },
   searchBar: {
@@ -406,7 +429,7 @@ overlay: {
   controlsRight: {
     position: 'absolute',
     right: 16,
-    top: '35%',
+    top: '40%',
     backgroundColor: 'white',
     borderRadius: 12,
     shadowColor: '#000',
@@ -428,7 +451,7 @@ overlay: {
   layerMenu: {
     position: 'absolute',
     right: 76,
-    top: '45%',
+    top: '42%',
     backgroundColor: 'white',
     borderRadius: 12,
     shadowColor: '#000',
@@ -457,17 +480,17 @@ overlay: {
   },
   routeControls: {
     position: 'absolute',
-    top: 80,
+    top: 130,
     left: 16,
     right: 16,
     backgroundColor: 'white',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
   routeInfo: {
     marginBottom: 12,
@@ -475,7 +498,7 @@ overlay: {
   routeStep: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   routeStepIcon: {
     width: 32,
@@ -504,145 +527,29 @@ overlay: {
   },
   bottomActions: {
     position: 'absolute',
-    bottom: 30,
+    bottom: 40,
     left: 16,
     right: 16,
   },
   bookRideButton: {
-    borderRadius: 20,
+    borderRadius: 16,
     shadowColor: '#007AFF',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowRadius: 12,
+    elevation: 8,
   },
   bookRideGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
-    borderRadius: 20,
+    paddingVertical: 20,
+    borderRadius: 16,
     gap: 12,
   },
   bookRideText: {
     color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  rideDetails: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  locationInfo: {
-    flex: 1,
-  },
-  locationLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  locationText: {
-    fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
-  },
-  locationDivider: {
-    height: 1,
-    backgroundColor: '#E0E0E0',
-    marginVertical: 12,
-  },
-  tripStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 24,
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#F0F0F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#666',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  cancelModalButton: {
-    flex: 1,
-    paddingVertical: 16,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
-    alignItems: 'center',
-  },
-  cancelModalText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#666',
-  },
-  confirmButton: {
-    flex: 2,
-    borderRadius: 12,
-    shadowColor: '#34C759',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  confirmGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 12,
-    gap: 8,
-  },
-  confirmText: {
-    color: 'white',
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: 'bold',
   },
 });
