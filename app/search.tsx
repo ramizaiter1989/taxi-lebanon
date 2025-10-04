@@ -27,7 +27,15 @@ interface SearchResult {
 
 export default function SearchScreen() {
   const [searchQuery, setSearchQuery] = useState('');
-  const { setSelectedPlace, addMarker, isRoutingMode, routeStart, setRouteStart, setRouteEnd } = useMap();
+  const { 
+    setSelectedPlace, 
+    addMarker, 
+    isRoutingMode, 
+    isBookingMode,
+    routeStart, 
+    setRouteStart, 
+    setRouteEnd 
+  } = useMap();
 
   const { data: searchResults, isLoading, refetch } = useQuery({
     queryKey: ['search', searchQuery],
@@ -59,7 +67,7 @@ export default function SearchScreen() {
       description: place.display_name,
     };
     
-    if (isRoutingMode) {
+    if (isBookingMode || isRoutingMode) {
       if (!routeStart) {
         setRouteStart(marker);
       } else {
@@ -93,7 +101,7 @@ export default function SearchScreen() {
             {subtitle}
           </Text>
         </View>
-        {isRoutingMode ? (
+        {(isBookingMode || isRoutingMode) ? (
           !routeStart ? (
             <MapPin size={20} color="#FF5252" />
           ) : (
@@ -113,11 +121,22 @@ export default function SearchScreen() {
     >
       <SafeAreaView style={styles.safeArea} edges={['bottom']}>
         <View style={styles.searchContainer}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <X size={24} color="#333" />
+          </TouchableOpacity>
+          
           <View style={styles.searchInputWrapper}>
             <Search size={20} color="#666" />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search for a place..."
+              placeholder={
+                isBookingMode 
+                  ? (!routeStart ? 'Search pickup location...' : 'Search destination...')
+                  : 'Search for a place...'
+              }
               value={searchQuery}
               onChangeText={setSearchQuery}
               onSubmitEditing={handleSearch}
@@ -130,13 +149,6 @@ export default function SearchScreen() {
               </TouchableOpacity>
             )}
           </View>
-          <TouchableOpacity 
-            style={styles.searchButton}
-            onPress={handleSearch}
-            disabled={!searchQuery.trim()}
-          >
-            <Text style={styles.searchButtonText}>Search</Text>
-          </TouchableOpacity>
         </View>
 
         {isLoading && (
@@ -146,7 +158,7 @@ export default function SearchScreen() {
           </View>
         )}
 
-        {searchResults && searchResults.length === 0 && !isLoading && (
+        {searchResults && searchResults.length === 0 && !isLoading && searchQuery.trim() && (
           <View style={styles.emptyContainer}>
             <MapPin size={48} color="#CCC" />
             <Text style={styles.emptyText}>No results found</Text>
@@ -167,30 +179,30 @@ export default function SearchScreen() {
 
         {!searchQuery && !searchResults && (
           <View style={styles.suggestionsContainer}>
-            {isRoutingMode && (
+            {(isBookingMode || isRoutingMode) && (
               <View style={styles.routeModeHeader}>
                 <Route size={20} color="#007AFF" />
                 <Text style={styles.routeModeText}>
-                  {!routeStart ? 'Select starting point' : 'Select destination'}
+                  {!routeStart ? 'Select pickup location' : 'Select destination'}
                 </Text>
               </View>
             )}
-            <Text style={styles.suggestionsTitle}>Popular Searches</Text>
-            {['New York', 'London', 'Paris', 'Tokyo', 'Sydney'].map((city) => {
-              if (!city || city.length > 50) return null;
-              const sanitizedCity = city.trim();
+            <Text style={styles.suggestionsTitle}>Quick Search</Text>
+            {['Restaurant', 'Coffee Shop', 'Park', 'Hospital', 'ATM'].map((place) => {
+              if (!place || place.length > 50) return null;
+              const sanitizedPlace = place.trim();
               
               return (
                 <TouchableOpacity
-                  key={sanitizedCity}
+                  key={sanitizedPlace}
                   style={styles.suggestionItem}
                   onPress={() => {
-                    setSearchQuery(sanitizedCity);
+                    setSearchQuery(sanitizedPlace);
                     setTimeout(() => refetch(), 100);
                   }}
                 >
                   <MapPin size={16} color="#007AFF" />
-                  <Text style={styles.suggestionText}>{sanitizedCity}</Text>
+                  <Text style={styles.suggestionText}>{sanitizedPlace}</Text>
                 </TouchableOpacity>
               );
             }).filter(Boolean)}
@@ -217,6 +229,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
     gap: 12,
+    alignItems: 'center',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   searchInputWrapper: {
     flex: 1,
@@ -232,17 +251,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingVertical: 12,
     color: '#333',
-  },
-  searchButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 10,
-    paddingHorizontal: 20,
-    justifyContent: 'center',
-  },
-  searchButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,

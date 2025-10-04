@@ -1,24 +1,30 @@
 import React, { useRef, useState, useEffect } from 'react';
+import EnhancedBookingModal from './EnhancedBookingModal';
+import mapHTML from '@/utils/mapHTML';
+
 import {
   StyleSheet,
   View,
   TouchableOpacity,
   Text,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
   Search, 
   Navigation, 
   Layers,
   Plus,
   Minus,
-  Route,
   X,
   MapPin,
   Flag,
   User,
+  Car,
+  Clock,
+  DollarSign,
+  Check,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
@@ -33,23 +39,26 @@ export default function ClientHome() {
   const [localUserLocation, setLocalUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [mapLayer, setMapLayer] = useState<'street' | 'satellite' | 'terrain'>('street');
   const [showLayerMenu, setShowLayerMenu] = useState(false);
+  const [showBookingConfirm, setShowBookingConfirm] = useState(false);
+  const [showBookingModal, setShowBookingModal] = useState(false);
 
-  const { user } = useUser(); // already checked by layout
+  const { user } = useUser();
   const { 
-    addMarker, 
-    clearMarkers, 
     selectedPlace, 
     isRoutingMode, 
     routeStart, 
     routeEnd, 
     currentRoute,
-    setRoutingMode, 
+    rideBooking,
+    isBookingMode,
     setRouteStart, 
     setRouteEnd, 
     calculateRoute, 
     clearRoute,
     setUserLocation,
-    startRoutingFromCurrentLocation
+    startRideBooking,
+    confirmRideBooking,
+    cancelRideBooking,
   } = useMap();
 
   // Get current location
@@ -75,374 +84,221 @@ export default function ClientHome() {
     }
   }, [selectedPlace]);
 
+  // Show route on map when calculated
+  useEffect(() => {
+    if (currentRoute && webViewRef.current) {
+      webViewRef.current.postMessage(JSON.stringify({ type: 'showRoute', route: currentRoute }));
+      
+      // Add route markers
+      if (routeStart) {
+        webViewRef.current.postMessage(JSON.stringify({ 
+          type: 'addRouteMarker', 
+          ...routeStart,
+          markerType: 'start'
+        }));
+      }
+      if (routeEnd) {
+        webViewRef.current.postMessage(JSON.stringify({ 
+          type: 'addRouteMarker', 
+          ...routeEnd,
+          markerType: 'end'
+        }));
+      }
+    }
+  }, [currentRoute, routeStart, routeEnd]);
+
+  // Trigger route calculation when both points are set
+  useEffect(() => {
+    if (routeStart && routeEnd && isBookingMode) {
+      calculateRoute();
+    }
+  }, [routeStart, routeEnd, isBookingMode, calculateRoute]);
+
+  // Show booking confirmation modal when route is ready
+  useEffect(() => {
+    if (rideBooking) {
+      setShowBookingConfirm(true);
+    }
+  }, [rideBooking]);
+
   // Handle map messages
   const handleMapMessage = (event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
       if (data.type === 'mapClick') {
-        const marker = { id: Date.now().toString(), lat: data.lat, lng: data.lng, title: 'Custom Marker', description: `Location: ${data.lat.toFixed(4)}, ${data.lng.toFixed(4)}` };
-        if (isRoutingMode) {
-          if (!routeStart) setRouteStart(marker);
-          else if (!routeEnd) setRouteEnd(marker);
-        } else addMarker(marker);
-      } else if (data.type === 'markerClick') {
-        router.push({ pathname: '/place-details', params: data });
+        const marker = { 
+          id: Date.now().toString(), 
+          lat: data.lat, 
+          lng: data.lng, 
+          title: 'Selected Location', 
+          description: `${data.lat.toFixed(4)}, ${data.lng.toFixed(4)}` 
+        };
+        
+        if (isBookingMode) {
+          if (!routeStart) {
+            setRouteStart(marker);
+          } else if (!routeEnd) {
+            setRouteEnd(marker);
+          }
+        }
       }
     } catch (error) {
       console.error(error);
     }
   };
 
+  const handleConfirmBooking = () => {
+    if (rideBooking) {
+      setShowBookingConfirm(false);
+      confirmRideBooking();
+      
+      // Navigate to a confirmation/waiting screen
+      // You can create this screen later
+      alert(`Ride booked! Fare: ${rideBooking.baseFare.toLocaleString()} LBP`);
+      
+      // For now, just clear the booking
+      handleCancelBooking();
+    }
+  };
+
+  const handleCancelBooking = () => {
+    setShowBookingConfirm(false);
+    cancelRideBooking();
+    webViewRef.current?.postMessage(JSON.stringify({ type: 'clearRoute' }));
+  };
+
   const centerOnUser = () => {
     if (localUserLocation && webViewRef.current) {
-      webViewRef.current.postMessage(JSON.stringify({ type: 'setView', ...localUserLocation, zoom: 15 }));
+      webViewRef.current?.postMessage(JSON.stringify({ type: 'setView', ...localUserLocation, zoom: 15 }));
     }
   };
 
   const zoomIn = () => webViewRef.current?.postMessage(JSON.stringify({ type: 'zoomIn' }));
   const zoomOut = () => webViewRef.current?.postMessage(JSON.stringify({ type: 'zoomOut' }));
+  
   const changeLayer = (layer: 'street' | 'satellite' | 'terrain') => {
     setMapLayer(layer);
     webViewRef.current?.postMessage(JSON.stringify({ type: 'changeLayer', layer }));
     setShowLayerMenu(false);
   };
-  const mapHTML = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-      <style>
-        body { margin: 0; padding: 0; }
-        #map { height: 100vh; width: 100vw; }
-        .leaflet-container { background: #f0f0f0; }
-      </style>
-    </head>
-    <body>
-      <div id="map"></div>
-      <script>
-        // Initialize map
-        var map = L.map('map', {
-          zoomControl: false,
-          attributionControl: false
-        }).setView([40.7128, -74.0060], 13);
 
-        // Tile layers
-        var layers = {
-          street: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-          }),
-          satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            maxZoom: 19,
-          }),
-          terrain: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-            maxZoom: 17,
-          })
-        };
+  
 
-        layers.street.addTo(map);
-        var currentLayer = 'street';
-
-        // Markers storage
-        var markers = {};
-        var userMarker = null;
-        var routeStartMarker = null;
-        var routeEndMarker = null;
-        var routeLayer = null;
-
-        // Custom icon
-        var customIcon = L.icon({
-          iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-          iconSize: [25, 41],
-          iconAnchor: [12, 41],
-          popupAnchor: [1, -34],
-          shadowSize: [41, 41]
-        });
-
-        var userIcon = L.icon({
-          iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
-          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-          iconSize: [25, 41],
-          iconAnchor: [12, 41],
-          popupAnchor: [1, -34],
-          shadowSize: [41, 41]
-        });
-
-        var startIcon = L.icon({
-          iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-          iconSize: [25, 41],
-          iconAnchor: [12, 41],
-          popupAnchor: [1, -34],
-          shadowSize: [41, 41]
-        });
-
-        var endIcon = L.icon({
-          iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-violet.png',
-          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-          iconSize: [25, 41],
-          iconAnchor: [12, 41],
-          popupAnchor: [1, -34],
-          shadowSize: [41, 41]
-        });
-
-        // Handle map clicks
-        map.on('click', function(e) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'mapClick',
-            lat: e.latlng.lat,
-            lng: e.latlng.lng
-          }));
-        });
-
-        // Listen for messages from React Native
-        document.addEventListener('message', function(e) {
-          handleMessage(e.data);
-        });
-
-        window.addEventListener('message', function(e) {
-          handleMessage(e.data);
-        });
-
-        function handleMessage(data) {
-          try {
-            var message = JSON.parse(data);
-            
-            switch(message.type) {
-              case 'setView':
-                map.setView([message.lat, message.lng], message.zoom || map.getZoom());
-                break;
-                
-              case 'addMarker':
-                if (markers[message.id]) {
-                  map.removeLayer(markers[message.id]);
-                }
-                var marker = L.marker([message.lat, message.lng], { icon: customIcon })
-                  .addTo(map)
-                  .bindPopup('<b>' + message.title + '</b><br>' + message.description);
-                
-                marker.on('click', function() {
-                  window.ReactNativeWebView.postMessage(JSON.stringify({
-                    type: 'markerClick',
-                    id: message.id,
-                    title: message.title,
-                    description: message.description,
-                    lat: message.lat,
-                    lng: message.lng
-                  }));
-                });
-                
-                markers[message.id] = marker;
-                break;
-                
-              case 'removeMarker':
-                if (markers[message.id]) {
-                  map.removeLayer(markers[message.id]);
-                  delete markers[message.id];
-                }
-                break;
-                
-              case 'clearMarkers':
-                for (var id in markers) {
-                  map.removeLayer(markers[id]);
-                }
-                markers = {};
-                break;
-                
-              case 'setUserLocation':
-                if (userMarker) {
-                  map.removeLayer(userMarker);
-                }
-                userMarker = L.marker([message.lat, message.lng], { icon: userIcon })
-                  .addTo(map)
-                  .bindPopup('Your Location');
-                break;
-                
-              case 'zoomIn':
-                map.zoomIn();
-                break;
-                
-              case 'zoomOut':
-                map.zoomOut();
-                break;
-                
-              case 'changeLayer':
-                map.removeLayer(layers[currentLayer]);
-                layers[message.layer].addTo(map);
-                currentLayer = message.layer;
-                break;
-                
-              case 'addRouteMarker':
-                var icon = message.markerType === 'start' ? startIcon : endIcon;
-                var marker = L.marker([message.lat, message.lng], { icon: icon })
-                  .addTo(map)
-                  .bindPopup('<b>' + (message.markerType === 'start' ? 'Start: ' : 'End: ') + message.title + '</b>');
-                
-                if (message.markerType === 'start') {
-                  if (routeStartMarker) map.removeLayer(routeStartMarker);
-                  routeStartMarker = marker;
-                } else {
-                  if (routeEndMarker) map.removeLayer(routeEndMarker);
-                  routeEndMarker = marker;
-                }
-                break;
-                
-              case 'showRoute':
-                if (routeLayer) {
-                  map.removeLayer(routeLayer);
-                }
-                
-                var coordinates = message.route.coordinates.map(function(coord) {
-                  return [coord[1], coord[0]];
-                });
-                
-                routeLayer = L.polyline(coordinates, {
-                  color: '#007AFF',
-                  weight: 5,
-                  opacity: 0.8
-                }).addTo(map);
-                
-                map.fitBounds(routeLayer.getBounds(), { padding: [20, 20] });
-                break;
-                
-              case 'clearRoute':
-                if (routeLayer) {
-                  map.removeLayer(routeLayer);
-                  routeLayer = null;
-                }
-                if (routeStartMarker) {
-                  map.removeLayer(routeStartMarker);
-                  routeStartMarker = null;
-                }
-                if (routeEndMarker) {
-                  map.removeLayer(routeEndMarker);
-                  routeEndMarker = null;
-                }
-                break;
-            }
-          } catch(error) {
-            console.error('Error handling message:', error);
-          }
-        }
-
-        // Send ready message
-        setTimeout(function() {
-          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }));
-        }, 100);
-      </script>
-    </body>
-    </html>
-  `;
-
-    
-    return (
+  return (
     <View style={styles.container}>
       <View style={styles.overlay}>
-  <View style={styles.headerRow}>
-    {/* Search Bar */}
-    <TouchableOpacity 
-      style={styles.searchBar}
-      onPress={() => router.push('/search')}
-    >
-      <LinearGradient colors={['#FFFFFF', '#F8F9FA']} style={styles.searchGradient}>
-        <Search size={20} color="#666" />
-        <Text style={styles.searchPlaceholder}>Search places...</Text>
-      </LinearGradient>
-    </TouchableOpacity>
+        <View style={styles.headerRow}>
+          <TouchableOpacity 
+            style={styles.searchBar}
+            onPress={() => router.push('/search')}
+          >
+            <LinearGradient colors={['#FFFFFF', '#F8F9FA']} style={styles.searchGradient}>
+              <Search size={20} color="#666" />
+              <Text style={styles.searchPlaceholder}>
+                {isBookingMode 
+                  ? (!routeStart ? 'Search pickup location...' : 'Search destination...')
+                  : 'Search places...'}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
 
-    {/* Profile Button */}
-    <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
-      <LinearGradient colors={['#007AFF', '#0051D5']} style={styles.profileGradient}>
-        <User size={20} color="white" />
-      </LinearGradient>
-    </TouchableOpacity>
-  </View>
-  <View style={styles.controlsRight}>
-    <TouchableOpacity style={styles.controlButton} onPress={zoomIn}>
-      <Plus size={24} color="#333" />
-    </TouchableOpacity>
-    <TouchableOpacity style={styles.controlButton} onPress={zoomOut}>
-      <Minus size={24} color="#333" />
-    </TouchableOpacity>
+          <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
+            <LinearGradient colors={['#007AFF', '#0051D5']} style={styles.profileGradient}>
+              <User size={20} color="white" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
 
-    <View style={styles.divider} />
+        <View style={styles.controlsRight}>
+          <TouchableOpacity style={styles.controlButton} onPress={zoomIn}>
+            <Plus size={24} color="#333" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.controlButton} onPress={zoomOut}>
+            <Minus size={24} color="#333" />
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity style={styles.controlButton} onPress={centerOnUser}>
+            <Navigation size={24} color="#007AFF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.controlButton} onPress={() => setShowLayerMenu(!showLayerMenu)}>
+            <Layers size={24} color="#333" />
+          </TouchableOpacity>
+        </View>
 
-    <TouchableOpacity style={styles.controlButton} onPress={centerOnUser}>
-      <Navigation size={24} color="#007AFF" />
-    </TouchableOpacity>
-
-    <TouchableOpacity style={styles.controlButton} onPress={() => setShowLayerMenu(!showLayerMenu)}>
-      <Layers size={24} color="#333" />
-    </TouchableOpacity>
-  </View>
-  {isRoutingMode && (
-    <View style={styles.routeControls}>
-      <View style={styles.routeInfo}>
-        <View style={styles.routeStep}>
-          <View style={[styles.routeStepIcon, { backgroundColor: routeStart ? '#FF5252' : '#E0E0E0' }]}>
-            <MapPin size={16} color="white" />
+        {showLayerMenu && (
+          <View style={styles.layerMenu}>
+            <TouchableOpacity
+              style={[styles.layerOption, mapLayer === 'street' && styles.layerOptionActive]}
+              onPress={() => changeLayer('street')}
+            >
+              <Text style={[styles.layerText, mapLayer === 'street' && styles.layerTextActive]}>
+                Street
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.layerOption, mapLayer === 'satellite' && styles.layerOptionActive]}
+              onPress={() => changeLayer('satellite')}
+            >
+              <Text style={[styles.layerText, mapLayer === 'satellite' && styles.layerTextActive]}>
+                Satellite
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.layerOption, mapLayer === 'terrain' && styles.layerOptionActive]}
+              onPress={() => changeLayer('terrain')}
+            >
+              <Text style={[styles.layerText, mapLayer === 'terrain' && styles.layerTextActive]}>
+                Terrain
+              </Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.routeStepText}>{routeStart ? routeStart.title : 'Tap map for start'}</Text>
-        </View>
-        <View style={styles.routeStep}>
-          <View style={[styles.routeStepIcon, { backgroundColor: routeEnd ? '#9C27B0' : '#E0E0E0' }]}>
-            <Flag size={16} color="white" />
+        )}
+
+        {isBookingMode && !showBookingConfirm && (
+          <View style={styles.routeControls}>
+            <View style={styles.routeInfo}>
+              <View style={styles.routeStep}>
+                <View style={[styles.routeStepIcon, { backgroundColor: routeStart ? '#FF5252' : '#E0E0E0' }]}>
+                  <MapPin size={16} color="white" />
+                </View>
+                <Text style={styles.routeStepText}>
+                  {routeStart ? routeStart.title : 'Tap map or search for pickup'}
+                </Text>
+              </View>
+              <View style={styles.routeStep}>
+                <View style={[styles.routeStepIcon, { backgroundColor: routeEnd ? '#9C27B0' : '#E0E0E0' }]}>
+                  <Flag size={16} color="white" />
+                </View>
+                <Text style={styles.routeStepText}>
+                  {routeEnd ? routeEnd.title : 'Tap map or search for destination'}
+                </Text>
+              </View>
+            </View>
+            
+            <TouchableOpacity 
+              style={styles.cancelButton}
+              onPress={handleCancelBooking}
+            >
+              <X size={20} color="#FF5252" />
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.routeStepText}>{routeEnd ? routeEnd.title : 'Tap map for destination'}</Text>
-        </View>
-      </View>
-      {currentRoute && (
-        <View style={styles.routeStats}>
-          <Text style={styles.routeDistance}>{(currentRoute.distance / 1000).toFixed(1)} km</Text>
-          <Text style={styles.routeDuration}>{Math.round(currentRoute.duration / 60)} min</Text>
-        </View>
-      )}
-    </View>
-  )}
-  <View style={styles.bottomActions}>
-    {!isRoutingMode ? (
-      <View style={styles.actionRow}>
-        <TouchableOpacity style={styles.actionButton} onPress={startRoutingFromCurrentLocation}>
-          <LinearGradient colors={['#007AFF', '#0051D5']} style={styles.actionGradient}>
-            <Route size={20} color="white" />
-            <Text style={styles.actionText}>Navigate from Here</Text>
-          </LinearGradient>
-        </TouchableOpacity>
+        )}
 
-        <TouchableOpacity style={styles.actionButton} onPress={() => setRoutingMode(true)}>
-          <LinearGradient colors={['#34C759', '#28A745']} style={styles.actionGradient}>
-            <MapPin size={20} color="white" />
-            <Text style={styles.actionText}>Custom Route</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.actionButton} onPress={() => {
-          clearMarkers();
-          webViewRef.current?.postMessage(JSON.stringify({ type: 'clearMarkers' }));
-        }}>
-          <LinearGradient colors={['#FF6B6B', '#FF5252']} style={styles.actionGradient}>
-            <X size={20} color="white" />
-            <Text style={styles.actionText}>Clear</Text>
-          </LinearGradient>
-        </TouchableOpacity>
+        {!isBookingMode && (
+          <View style={styles.bottomActions}>
+            <TouchableOpacity 
+              style={styles.bookRideButton}
+              onPress={startRideBooking}
+            >
+              <LinearGradient colors={['#007AFF', '#0051D5']} style={styles.bookRideGradient}>
+                <Car size={24} color="white" />
+                <Text style={styles.bookRideText}>Book a Ride</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
-    ) : (
-      <View style={styles.actionRow}>
-        <TouchableOpacity style={styles.actionButton} onPress={() => {
-          clearRoute();
-          webViewRef.current?.postMessage(JSON.stringify({ type: 'clearRoute' }));
-        }}>
-          <LinearGradient colors={['#FF6B6B', '#FF5252']} style={styles.actionGradient}>
-            <X size={20} color="white" />
-            <Text style={styles.actionText}>Cancel Route</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
-    )}
-  </View>
-</View> {/* end of overlay */}
 
       <WebView
         ref={webViewRef}
@@ -451,12 +307,16 @@ export default function ClientHome() {
         onMessage={handleMapMessage}
         onLoadEnd={() => {
           setIsLoading(false);
-          if (localUserLocation) webViewRef.current?.postMessage(JSON.stringify({ type: 'setUserLocation', ...localUserLocation }));
+          if (localUserLocation) {
+            webViewRef.current?.postMessage(JSON.stringify({ 
+              type: 'setUserLocation', 
+              ...localUserLocation 
+            }));
+          }
         }}
         javaScriptEnabled
         domStorageEnabled
       />
-      
 
       {isLoading && (
         <View style={styles.loadingContainer}>
@@ -465,15 +325,101 @@ export default function ClientHome() {
         </View>
       )}
 
-      {/* Render your overlay controls, bottom buttons, and layer menu */}
-      {/* You can reuse all your previous styles and JSX for header, controls, route actions */}
+      <Modal
+        visible={showBookingConfirm}
+        transparent
+        animationType="slide"
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Confirm Your Ride</Text>
+            
+            {rideBooking && (
+              <>
+                <View style={styles.rideDetails}>
+                  <View style={styles.locationRow}>
+                    <MapPin size={20} color="#FF5252" />
+                    <View style={styles.locationInfo}>
+                      <Text style={styles.locationLabel}>Pickup</Text>
+                      <Text style={styles.locationText} numberOfLines={2}>
+                        {rideBooking.pickup.title}
+                      </Text>
+                    </View>
+                  </View>
+                  
+                  <View style={styles.locationDivider} />
+                  
+                  <View style={styles.locationRow}>
+                    <Flag size={20} color="#9C27B0" />
+                    <View style={styles.locationInfo}>
+                      <Text style={styles.locationLabel}>Destination</Text>
+                      <Text style={styles.locationText} numberOfLines={2}>
+                        {rideBooking.destination.title}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.tripStats}>
+                  <View style={styles.statItem}>
+                    <View style={styles.statIcon}>
+                      <Navigation size={20} color="#007AFF" />
+                    </View>
+                    <Text style={styles.statValue}>
+                      {(rideBooking.route.distance / 1000).toFixed(1)} km
+                    </Text>
+                    <Text style={styles.statLabel}>Distance</Text>
+                  </View>
+                  
+                  <View style={styles.statItem}>
+                    <View style={styles.statIcon}>
+                      <Clock size={20} color="#34C759" />
+                    </View>
+                    <Text style={styles.statValue}>
+                      {Math.round(rideBooking.route.duration / 60)} min
+                    </Text>
+                    <Text style={styles.statLabel}>Duration</Text>
+                  </View>
+                  
+                  <View style={styles.statItem}>
+                    <View style={styles.statIcon}>
+                      <DollarSign size={20} color="#FF9500" />
+                    </View>
+                    <Text style={styles.statValue}>
+                      {rideBooking.baseFare.toLocaleString()}
+                    </Text>
+                    <Text style={styles.statLabel}>LBP</Text>
+                  </View>
+                </View>
+
+                <View style={styles.modalActions}>
+                  <TouchableOpacity 
+                    style={styles.cancelModalButton}
+                    onPress={handleCancelBooking}
+                  >
+                    <Text style={styles.cancelModalText}>Cancel</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.confirmButton}
+                    onPress={handleConfirmBooking}
+                  >
+                    <LinearGradient colors={['#34C759', '#28A745']} style={styles.confirmGradient}>
+                      <Check size={20} color="white" />
+                      <Text style={styles.confirmText}>Confirm Ride</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
-    
   );
 }
 
 const styles = StyleSheet.create({
-
   container: {
     flex: 1,
     backgroundColor: '#fff',
@@ -627,22 +573,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
   },
-  routeStats: {
+  cancelButton: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    gap: 8,
   },
-  routeDistance: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#007AFF',
-  },
-  routeDuration: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#666',
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FF5252',
   },
   bottomActions: {
     position: 'absolute',
@@ -650,31 +591,141 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
   },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionButton: {
-    flex: 1,
+  bookRideButton: {
     borderRadius: 20,
-    shadowColor: '#000',
+    shadowColor: '#007AFF',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 5,
   },
-  actionGradient: {
+  bookRideGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 18,
     borderRadius: 20,
-    gap: 6,
+    gap: 12,
   },
-  actionText: {
+  bookRideText: {
     color: 'white',
-    fontSize: 14,
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  rideDetails: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  locationInfo: {
+    flex: 1,
+  },
+  locationLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  locationText: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
+  },
+  locationDivider: {
+    height: 1,
+    backgroundColor: '#E0E0E0',
+    marginVertical: 12,
+  },
+  tripStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 24,
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F0F0F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#666',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  cancelModalButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    alignItems: 'center',
+  },
+  cancelModalText: {
+    fontSize: 16,
     fontWeight: '600',
+    color: '#666',
+  },
+  confirmButton: {
+    flex: 2,
+    borderRadius: 12,
+    shadowColor: '#34C759',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  confirmGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+  },
+  confirmText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
