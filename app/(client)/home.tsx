@@ -325,96 +325,10 @@ export default function ClientHome() {
         </View>
       )}
 
-      <Modal
-        visible={showBookingConfirm}
-        transparent
-        animationType="slide"
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Confirm Your Ride</Text>
-            
-            {rideBooking && (
-              <>
-                <View style={styles.rideDetails}>
-                  <View style={styles.locationRow}>
-                    <MapPin size={20} color="#FF5252" />
-                    <View style={styles.locationInfo}>
-                      <Text style={styles.locationLabel}>Pickup</Text>
-                      <Text style={styles.locationText} numberOfLines={2}>
-                        {rideBooking.pickup.title}
-                      </Text>
-                    </View>
-                  </View>
-                  
-                  <View style={styles.locationDivider} />
-                  
-                  <View style={styles.locationRow}>
-                    <Flag size={20} color="#9C27B0" />
-                    <View style={styles.locationInfo}>
-                      <Text style={styles.locationLabel}>Destination</Text>
-                      <Text style={styles.locationText} numberOfLines={2}>
-                        {rideBooking.destination.title}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                <View style={styles.tripStats}>
-                  <View style={styles.statItem}>
-                    <View style={styles.statIcon}>
-                      <Navigation size={20} color="#007AFF" />
-                    </View>
-                    <Text style={styles.statValue}>
-                      {(rideBooking.route.distance / 1000).toFixed(1)} km
-                    </Text>
-                    <Text style={styles.statLabel}>Distance</Text>
-                  </View>
-                  
-                  <View style={styles.statItem}>
-                    <View style={styles.statIcon}>
-                      <Clock size={20} color="#34C759" />
-                    </View>
-                    <Text style={styles.statValue}>
-                      {Math.round(rideBooking.route.duration / 60)} min
-                    </Text>
-                    <Text style={styles.statLabel}>Duration</Text>
-                  </View>
-                  
-                  <View style={styles.statItem}>
-                    <View style={styles.statIcon}>
-                      <DollarSign size={20} color="#FF9500" />
-                    </View>
-                    <Text style={styles.statValue}>
-                      {rideBooking.baseFare.toLocaleString()}
-                    </Text>
-                    <Text style={styles.statLabel}>LBP</Text>
-                  </View>
-                </View>
-
-                <View style={styles.modalActions}>
-                  <TouchableOpacity 
-                    style={styles.cancelModalButton}
-                    onPress={handleCancelBooking}
-                  >
-                    <Text style={styles.cancelModalText}>Cancel</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity 
-                    style={styles.confirmButton}
-                    onPress={handleConfirmBooking}
-                  >
-                    <LinearGradient colors={['#34C759', '#28A745']} style={styles.confirmGradient}>
-                      <Check size={20} color="white" />
-                      <Text style={styles.confirmText}>Confirm Ride</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
+      <EnhancedBookingModal 
+  visible={showBookingModal} 
+  onClose={() => setShowBookingModal(false)} 
+/>
     </View>
   );
 }
