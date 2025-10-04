@@ -420,17 +420,20 @@ export default function ClientHome() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
+ container: {
+  flex: 1,
+  position: 'relative', // to make zIndex work properly
+  backgroundColor: '#fff',
+},
+overlay: {
+  ...StyleSheet.absoluteFillObject,
+  zIndex: 1, // ensure it's on top
+  pointerEvents: 'box-none',
+},
   map: {
-    flex: 1,
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    pointerEvents: 'box-none',
-  },
+  ...StyleSheet.absoluteFillObject,
+  zIndex: -1,
+},
   loadingContainer: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
