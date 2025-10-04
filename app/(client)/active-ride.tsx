@@ -33,7 +33,7 @@ export default function ActiveRideScreen() {
     rating: 4.8,
     vehicle: 'Toyota Camry',
     plateNumber: 'ABC 1234',
-    photo: 'https://via.placeholder.com/100',
+    photo: 'https://www.zoom.taxi/wp-content/uploads/2020/09/Untitled-design-4.jpg',
     eta: 5,
   };
 

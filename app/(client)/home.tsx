@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import EnhancedBookingModal from './EnhancedBookingModal';
+import EnhancedBookingModal from '../EnhancedBookingModal';
 import mapHTML from '@/utils/mapHTML';
 
 import {

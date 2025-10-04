@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { Home, Clock, Settings } from 'lucide-react-native';
+import { Home, Clock, Settings, Car } from 'lucide-react-native';
 
 export default function ClientTabsLayout() {
   return (
@@ -36,10 +36,17 @@ export default function ClientTabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="history"
+        name="trip-history"
         options={{
           title: 'Trips',
           tabBarIcon: ({ color, size }) => <Clock color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="active-ride"
+        options={{
+          title: 'Live Ride',
+          tabBarIcon: ({ color, size }) => <Car color={color} size={size} />,
         }}
       />
       <Tabs.Screen
@@ -49,6 +56,14 @@ export default function ClientTabsLayout() {
           tabBarIcon: ({ color, size }) => <Settings color={color} size={size} />,
         }}
       />
+      
+            {/* 🚫 Hidden tabs (internal screens) */}
+      <Tabs.Screen name="profile" options={{ href: null }} />
+      <Tabs.Screen name="safety" options={{ href: null }} />
+      <Tabs.Screen name="ride-tracking" options={{ href: null }} />
+      <Tabs.Screen name="saved-locations" options={{ href: null }} />
+      <Tabs.Screen name="history" options={{ href: null }} />
+      <Tabs.Screen name="EnhancedBookingModal" options={{ href: null }} />
     </Tabs>
   );
 }
