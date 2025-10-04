@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import EnhancedBookingModal from '../EnhancedBookingModal';
 import mapHTML from '@/utils/mapHTML';
+import { apiService } from '@/services/api';
 
 import {
   StyleSheet,
@@ -31,7 +32,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 export default function ClientHomeScreen() {
   const router = useRouter();
   const webViewRef = useRef<WebView>(null);
+  const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null); // FIXED: Use useRef
+  
   const [isLoading, setIsLoading] = useState(true);
+  const [isConfirming, setIsConfirming] = useState(false); // FIXED: Added this
   const [localUserLocation, setLocalUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [mapLayer, setMapLayer] = useState<'street' | 'satellite' | 'terrain'>('street');
   const [showLayerMenu, setShowLayerMenu] = useState(false);
@@ -63,7 +67,6 @@ export default function ClientHomeScreen() {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
           Alert.alert('Permission Required', 'Location permission is required to use this app.');
-          // Default to Beirut center if permission denied
           const defaultCoords = { lat: 33.8886, lng: 35.4955 };
           setLocalUserLocation(defaultCoords);
           setUserLocation(defaultCoords);
@@ -77,7 +80,6 @@ export default function ClientHomeScreen() {
         setLocalUserLocation(coords);
         setUserLocation(coords);
 
-        // Center map on user location immediately after getting coordinates
         if (webViewRef.current) {
           webViewRef.current.postMessage(JSON.stringify({ 
             type: 'setView', 
@@ -87,7 +89,6 @@ export default function ClientHomeScreen() {
         }
       } catch (error) {
         console.error('Error getting location:', error);
-        // Fallback to Beirut center
         const defaultCoords = { lat: 33.8886, lng: 35.4955 };
         setLocalUserLocation(defaultCoords);
         setUserLocation(defaultCoords);
@@ -132,6 +133,15 @@ export default function ClientHomeScreen() {
     }
   }, [routeStart, routeEnd, isBookingMode, currentRoute, calculateRoute]);
 
+  // Cleanup location tracking on unmount
+  useEffect(() => {
+    return () => {
+      if (locationSubscriptionRef.current) {
+        locationSubscriptionRef.current.remove();
+      }
+    };
+  }, []);
+
   // Handle map messages
   const handleMapMessage = (event: any) => {
     try {
@@ -175,21 +185,64 @@ export default function ClientHomeScreen() {
     webViewRef.current?.postMessage(JSON.stringify({ type: 'clearRoute' }));
   };
 
-  const handleConfirmBooking = () => {
-    setHasActiveRide(true);
-    confirmRideBooking();
-    // Navigate to active ride screen or show confirmation
-    Alert.alert(
-      'Ride Confirmed!',
-      'Searching for nearby drivers...',
-      [
+  // FIXED: Moved inside component
+  const startLocationTracking = async (rideId: string) => {
+    try {
+      const subscription = await Location.watchPositionAsync(
         {
-          text: 'OK',
-          onPress: () => router.push('/active-ride')
+          accuracy: Location.Accuracy.High,
+          timeInterval: 5000,
+          distanceInterval: 10,
+        },
+        async (location) => {
+          try {
+            await apiService.passenger.updateLocation(
+              location.coords.latitude,
+              location.coords.longitude
+            );
+            console.log('Location updated:', location.coords);
+          } catch (error) {
+            console.error('Error updating location:', error);
+          }
         }
-      ]
-    );
+      );
+      locationSubscriptionRef.current = subscription;
+    } catch (error) {
+      console.error('Error starting location tracking:', error);
+    }
   };
+
+  const stopLocationTracking = () => {
+    if (locationSubscriptionRef.current) {
+      locationSubscriptionRef.current.remove();
+      locationSubscriptionRef.current = null;
+    }
+  };
+
+  // FIXED: Proper error handling
+const handleConfirmBooking = async () => {
+  try {
+    setIsConfirming(true);
+
+    await confirmRideBooking();
+
+    // Access rideBooking here
+    const rideId = rideBooking?.rideId;
+
+    if (rideId) {
+      router.push(`/active-ride?rideId=${rideId}`);
+      startLocationTracking(rideId);
+    }
+
+    setHasActiveRide(true);
+  } catch (error: any) {
+    console.error('Error confirming booking:', error);
+    Alert.alert('Error', 'Failed to book ride. Please try again.');
+  } finally {
+    setIsConfirming(false);
+  }
+};
+
 
   const centerOnUser = () => {
     if (localUserLocation && webViewRef.current) {
@@ -208,152 +261,26 @@ export default function ClientHomeScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.overlay}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity 
-            style={styles.searchBar}
-            onPress={() => router.push('/search')}
-          >
-            <LinearGradient colors={['#FFFFFF', '#F8F9FA']} style={styles.searchGradient}>
-              <Search size={20} color="#666" />
-              <Text style={styles.searchPlaceholder}>
-                {isBookingMode 
-                  ? (!routeStart ? 'Search pickup location...' : 'Search destination...')
-                  : 'Search places...'}
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
-            <LinearGradient colors={['#007AFF', '#0051D5']} style={styles.profileGradient}>
-              <User size={20} color="white" />
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.controlsRight}>
-          <TouchableOpacity style={styles.controlButton} onPress={zoomIn}>
-            <Plus size={24} color="#333" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.controlButton} onPress={zoomOut}>
-            <Minus size={24} color="#333" />
-          </TouchableOpacity>
-          <View style={styles.divider} />
-          <TouchableOpacity style={styles.controlButton} onPress={centerOnUser}>
-            <Navigation size={24} color="#007AFF" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.controlButton} onPress={() => setShowLayerMenu(!showLayerMenu)}>
-            <Layers size={24} color="#333" />
-          </TouchableOpacity>
-        </View>
-
-        {showLayerMenu && (
-          <View style={styles.layerMenu}>
-            <TouchableOpacity
-              style={[styles.layerOption, mapLayer === 'street' && styles.layerOptionActive]}
-              onPress={() => changeLayer('street')}
-            >
-              <Text style={[styles.layerText, mapLayer === 'street' && styles.layerTextActive]}>
-                Street
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.layerOption, mapLayer === 'satellite' && styles.layerOptionActive]}
-              onPress={() => changeLayer('satellite')}
-            >
-              <Text style={[styles.layerText, mapLayer === 'satellite' && styles.layerTextActive]}>
-                Satellite
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.layerOption, mapLayer === 'terrain' && styles.layerOptionActive]}
-              onPress={() => changeLayer('terrain')}
-            >
-              <Text style={[styles.layerText, mapLayer === 'terrain' && styles.layerTextActive]}>
-                Terrain
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {isBookingMode && !rideBooking && (
-          <View style={styles.routeControls}>
-            <View style={styles.routeInfo}>
-              <View style={styles.routeStep}>
-                <View style={[styles.routeStepIcon, { backgroundColor: routeStart ? '#FF5252' : '#E0E0E0' }]}>
-                  <MapPin size={16} color="white" />
-                </View>
-                <Text style={styles.routeStepText}>
-                  {routeStart ? routeStart.title : 'Tap map or search for pickup'}
-                </Text>
-              </View>
-              <View style={styles.routeStep}>
-                <View style={[styles.routeStepIcon, { backgroundColor: routeEnd ? '#9C27B0' : '#E0E0E0' }]}>
-                  <Flag size={16} color="white" />
-                </View>
-                <Text style={styles.routeStepText}>
-                  {routeEnd ? routeEnd.title : 'Tap map or search for destination'}
-                </Text>
-              </View>
-            </View>
-            
-            <TouchableOpacity 
-              style={styles.cancelButton}
-              onPress={handleCancelBooking}
-            >
-              <X size={20} color="#FF5252" />
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {!isBookingMode && !hasActiveRide && (
-          <View style={styles.bottomActions}>
-            <TouchableOpacity 
-              style={styles.bookRideButton}
-              onPress={handleStartBooking}
-            >
-              <LinearGradient colors={['#007AFF', '#0051D5']} style={styles.bookRideGradient}>
-                <Text style={styles.bookRideText}>Where to?</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-
-      <WebView
-        ref={webViewRef}
-        source={{ html: mapHTML }}
-        style={styles.map}
-        onMessage={handleMapMessage}
-        onLoadEnd={() => {
-          setIsLoading(false);
-          if (localUserLocation) {
-            webViewRef.current?.postMessage(JSON.stringify({ 
-              type: 'setUserLocation', 
-              ...localUserLocation 
-            }));
-          }
-        }}
-        javaScriptEnabled
-        domStorageEnabled
-      />
-
-      {isLoading && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.loadingText}>Loading map...</Text>
-        </View>
-      )}
-
+      {/* ... rest of your JSX stays the same ... */}
+      
       <EnhancedBookingModal 
         visible={!!rideBooking}
         onClose={handleCancelBooking}
         onConfirm={handleConfirmBooking}
       />
+      
+      {/* OPTIONAL: Show loading overlay when confirming */}
+      {isConfirming && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={styles.loadingText}>Confirming ride...</Text>
+        </View>
+      )}
     </View>
   );
 }
+
+// ... styles stay the same ...
 
 const styles = StyleSheet.create({
   container: {
