@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "960200915608",
+    "project_id": "focused-mote-341011",
+    "storage_bucket": "focused-mote-341011.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:960200915608:android:1f0135abf983a4e437aeed",
+        "android_client_info": {
+          "package_name": "com.rami.bellaride"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCwgVecQrSPPp3aUGl6aZPQfhthU2OfrcI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

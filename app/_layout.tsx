@@ -5,13 +5,15 @@ import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { UserProvider } from "@/hooks/user-store";
 import { RideProvider } from "@/hooks/ride-store";
-import { MapProvider } from "@/providers/MapProvider"; // Add this
+import { MapProvider } from "@/providers/MapProvider"; // Add this\\
+import { useKeepAwake } from 'expo-keep-awake';
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
+  
   return (
     <Stack screenOptions={{ headerBackTitle: "Back" }}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -24,6 +26,7 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  useKeepAwake();
   useEffect(() => {
     SplashScreen.hideAsync();
   }, []);
