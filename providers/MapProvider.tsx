@@ -204,35 +204,68 @@ export const [MapProvider, useMap] = createContextHook<MapContextType>(() => {
     }
   }, []);
 
-  const startRideBooking = useCallback(async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        console.log('Location permission denied');
-        return;
-      }
-
-      const location = await Location.getCurrentPositionAsync({});
-      const currentLocationMarker: Marker = {
-        id: 'pickup-location',
-        lat: location.coords.latitude,
-        lng: location.coords.longitude,
-        title: 'Pickup Location',
-        description: 'Your current location'
-      };
-      
-      setUserLocation({
-        lat: location.coords.latitude,
-        lng: location.coords.longitude
-      });
-      
-      setRouteStart(currentLocationMarker);
-      setIsBookingMode(true);
-      setIsRoutingMode(true);
-    } catch (error) {
-      console.error('Error getting current location:', error);
+const startRideBooking = useCallback(async () => {
+  try {
+    // Request location permission
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      console.log('Location permission denied');
+      return;
     }
-  }, []);
+
+    // Get current location
+    const location = await Location.getCurrentPositionAsync({});
+    const currentLocationMarker = {
+      id: 'pickup-location',
+      lat: location.coords.latitude,
+      lng: location.coords.longitude,
+      title: 'Pickup Location',
+      description: 'Your current location'
+    };
+
+    // Set state for UI
+    setUserLocation({
+      lat: location.coords.latitude,
+      lng: location.coords.longitude
+    });
+    setRouteStart(currentLocationMarker);
+    setIsBookingMode(true);
+    setIsRoutingMode(true);
+
+    // TODO: Get destination coordinates (e.g., from state or user input)
+    // For now, using placeholder values
+    const destinationLat = 33.895; // Replace with actual destination lat
+    const destinationLng = 35.506; // Replace with actual destination lng
+
+    // Send POST request to backend
+    const response = await fetch('https://your-api-base-url/api/rides', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Add auth token if required
+        // 'Authorization': `Bearer ${yourAuthToken}`,
+      },
+      body: JSON.stringify({
+        origin_lat: location.coords.latitude,
+        origin_lng: location.coords.longitude,
+        destination_lat: destinationLat,
+        destination_lng: destinationLng,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to create ride request');
+    }
+
+    const result = await response.json();
+    console.log('Ride request created:', result);
+    // Optionally, update state or navigate based on result
+
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}, []);
+
 
   const calculateBaseFare = useCallback((distance: number, duration: number): number => {
     const baseFare = 5000;

@@ -87,9 +87,9 @@ export default function LoginScreen() {
       Alert.alert('Success', `Welcome back, ${user.name}! 🎉`);
 
       // Navigate based on role
-      if (user.role === 'driver') {
+      if (user.role === 'passenger') {
         router.replace('/(client)/home');
-      } else if (user.role === 'passenger') {
+      } else if (user.role === 'driver') {
         router.replace('/(rider)/home');
       } else if (user.role === 'admin') {
         router.replace('/(admin)/home');
@@ -131,6 +131,10 @@ export default function LoginScreen() {
     transform: [{ scale: withSpring(buttonScale.value) }],
   }));
 
+
+
+
+  
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}

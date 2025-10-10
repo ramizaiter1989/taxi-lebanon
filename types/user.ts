@@ -24,7 +24,7 @@ export interface Ride {
   riderId?: string;
   pickup: Location;
   dropoff: Location;
-  status: 'pending' | 'accepted' | 'on_way' | 'started' | 'completed' | 'cancelled';
+  status: 'pending' | 'accepted' | 'in_progress' | 'started' | 'completed' | 'cancelled';
   fare: number;
   estimatedDuration: number;
   createdAt: Date;
