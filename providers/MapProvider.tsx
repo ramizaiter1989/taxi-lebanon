@@ -239,7 +239,7 @@ const startRideBooking = useCallback(async () => {
     const destinationLng = 35.506; // Replace with actual destination lng
 
     // Send POST request to backend
-    const response = await fetch(`${API_BASE_URL}/api/rides`, {
+    const response = await fetch(`${API_BASE_URL}/rides`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
