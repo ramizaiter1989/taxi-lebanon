@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
 import * as Location from 'expo-location';
+import { API_BASE_URL } from "../constants/config";
 
 interface Marker {
   id: string;
@@ -238,7 +239,7 @@ const startRideBooking = useCallback(async () => {
     const destinationLng = 35.506; // Replace with actual destination lng
 
     // Send POST request to backend
-    const response = await fetch('https://your-api-base-url/api/rides', {
+    const response = await fetch(`${API_BASE_URL}/api/rides`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
