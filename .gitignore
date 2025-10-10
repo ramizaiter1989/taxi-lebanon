@@ -6,8 +6,7 @@ expo-env.d.ts
 .expo/
 node_modules/
 *.log
-GoogleService-Info.plist
-google-services.json
+
 *.p12
 *.jks
 # @end expo-cli
