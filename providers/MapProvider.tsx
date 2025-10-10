@@ -2,6 +2,8 @@ import { useState, useCallback, useMemo } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
 import * as Location from 'expo-location';
 import { API_BASE_URL } from "../constants/config";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert } from 'react-native';
 
 interface Marker {
   id: string;
@@ -207,6 +209,13 @@ export const [MapProvider, useMap] = createContextHook<MapContextType>(() => {
 
 const startRideBooking = useCallback(async () => {
   try {
+    // Get token from AsyncStorage
+    const authToken = await AsyncStorage.getItem('token');
+    if (!authToken) {
+      Alert.alert('Error', 'You are not logged in!');
+      return;
+    }
+
     // Request location permission
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
@@ -214,37 +223,15 @@ const startRideBooking = useCallback(async () => {
       return;
     }
 
-    // Get current location
     const location = await Location.getCurrentPositionAsync({});
-    const currentLocationMarker = {
-      id: 'pickup-location',
-      lat: location.coords.latitude,
-      lng: location.coords.longitude,
-      title: 'Pickup Location',
-      description: 'Your current location'
-    };
+    const destinationLat = 33.895;
+    const destinationLng = 35.506;
 
-    // Set state for UI
-    setUserLocation({
-      lat: location.coords.latitude,
-      lng: location.coords.longitude
-    });
-    setRouteStart(currentLocationMarker);
-    setIsBookingMode(true);
-    setIsRoutingMode(true);
-
-    // TODO: Get destination coordinates (e.g., from state or user input)
-    // For now, using placeholder values
-    const destinationLat = 33.895; // Replace with actual destination lat
-    const destinationLng = 35.506; // Replace with actual destination lng
-
-    // Send POST request to backend
     const response = await fetch(`${API_BASE_URL}/rides`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // Add auth token if required
-        // 'Authorization': `Bearer ${yourAuthToken}`,
+        'Authorization': `Bearer ${authToken}`, // <- use token here
       },
       body: JSON.stringify({
         origin_lat: location.coords.latitude,
@@ -260,7 +247,6 @@ const startRideBooking = useCallback(async () => {
 
     const result = await response.json();
     console.log('Ride request created:', result);
-    // Optionally, update state or navigate based on result
 
   } catch (error) {
     console.error('Error:', error);

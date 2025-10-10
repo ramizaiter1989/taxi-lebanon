@@ -1,4 +1,4 @@
-// app/(auth)/login.tsx
+// app/login.tsx
 import React, { useState } from 'react';
 import { API_BASE_URL } from "../constants/config";
 import {
@@ -134,7 +134,7 @@ export default function LoginScreen() {
 
 
 
-  
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
