@@ -74,7 +74,7 @@ export default function MapComponent({
         
         {isSelectionMode && (
           <Text style={styles.webMapInstructions}>
-            Tap to select location (Web preview mode)
+            Tap to select location (Web preview mode)!
           </Text>
         )}
       </View>
