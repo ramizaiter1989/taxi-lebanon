@@ -11,37 +11,36 @@ export default function ClientProfileScreen() {
   const { user, logout } = useUser();
 
 const handleLogout = () => {
+  const performLogout = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (token) {
+        await axios.post(
+          `${API_BASE_URL}/logout`,
+          {},
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      }
+    } catch (error) {
+      console.log('Logout failed:', error);
+    } finally {
+      // Clear token and navigate regardless
+      await AsyncStorage.removeItem('token');
+      router.replace('/role-selection');
+    }
+  };
+
   Alert.alert(
     'Logout',
     'Are you sure you want to logout?',
     [
       { text: 'Cancel', style: 'cancel' },
-      { 
-        text: 'Logout', 
-        onPress: () => {
-          (async () => {
-            try {
-              const token = await AsyncStorage.getItem('token');
-              if (token) {
-                await axios.post(
-                  `${API_BASE_URL}/logout`,
-                  {},
-                  { headers: { Authorization: `Bearer ${token}` } }
-                );
-              }
-            } catch (error) {
-              console.log('Logout failed:', error);
-            } finally {
-              // Clear token and navigate regardless
-              await AsyncStorage.removeItem('token');
-              router.replace('/role-selection');
-            }
-          })();
-        } 
-      }
+      { text: 'Logout', onPress: performLogout }
     ]
   );
 };
+
+
 
 
 

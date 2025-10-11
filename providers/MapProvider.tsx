@@ -2,7 +2,9 @@ import { useState, useCallback, useMemo } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import axios from 'axios';
+import { Alert } from 'react-native';
+import { API_BASE_URL } from '@/constants/config';
 interface Marker {
   id: string;
   lat: number;
@@ -344,9 +346,39 @@ const startRideBooking = useCallback(async () => {
     }
   }, [rideBooking, selectedVehicleType, calculateFinalFare]);
 
-  const confirmRideBooking = useCallback(() => {
-    console.log('Ride booking confirmed:', rideBooking);
-  }, [rideBooking]);
+const confirmRideBooking = useCallback(async () => {
+  if (!rideBooking) return;
+
+  try {
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      console.log('No auth token found');
+      return;
+    }
+
+    const response = await axios.post(
+      `${API_BASE_URL}/rides`,
+      {
+        origin_lat: rideBooking.pickup.lat,
+        origin_lng: rideBooking.pickup.lng,
+        destination_lat: rideBooking.destination?.lat,
+        destination_lng: rideBooking.destination?.lng,
+      },
+      {
+        headers: { Authorization: `Bearer ${token}` }
+      }
+    );
+
+    console.log('Ride created:', response.data);
+    // Save ride ID locally if needed
+    setRideBooking(prev => prev ? { ...prev, id: response.data.id } : prev);
+
+  } catch (error: any) {
+    console.error('Failed to create ride:', error.response?.data || error.message);
+    Alert.alert('Error', error.response?.data?.error || 'Failed to create ride');
+  }
+}, [rideBooking]);
+
 
   const cancelRideBooking = useCallback(() => {
     setRideBooking(null);
