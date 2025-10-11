@@ -1,4 +1,4 @@
-// app/login.tsx
+// app/(auth)/login.tsx
 import React, { useState } from 'react';
 import { API_BASE_URL } from "../constants/config";
 import {
@@ -130,10 +130,6 @@ export default function LoginScreen() {
   const buttonAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: withSpring(buttonScale.value) }],
   }));
-
-
-
-
 
   return (
     <KeyboardAvoidingView

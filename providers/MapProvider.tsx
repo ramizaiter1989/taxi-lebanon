@@ -1,9 +1,8 @@
 import { useState, useCallback, useMemo } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
 import * as Location from 'expo-location';
-import { API_BASE_URL } from "../constants/config";
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert } from 'react-native';
+import { API_BASE_URL } from '../constants/config';
 
 interface Marker {
   id: string;
@@ -212,7 +211,7 @@ const startRideBooking = useCallback(async () => {
     // Get token from AsyncStorage
     const authToken = await AsyncStorage.getItem('token');
     if (!authToken) {
-      Alert.alert('Error', 'You are not logged in!');
+      console.log('No auth token found');
       return;
     }
 
