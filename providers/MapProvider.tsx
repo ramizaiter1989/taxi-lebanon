@@ -1,8 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
 import * as Location from 'expo-location';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL } from '../constants/config';
 
 interface Marker {
   id: string;
@@ -208,7 +206,6 @@ export const [MapProvider, useMap] = createContextHook<MapContextType>(() => {
 
 const startRideBooking = useCallback(async () => {
   try {
-    // Get token from AsyncStorage
     const authToken = await AsyncStorage.getItem('token');
     if (!authToken) {
       console.log('No auth token found');
@@ -223,35 +220,27 @@ const startRideBooking = useCallback(async () => {
     }
 
     const location = await Location.getCurrentPositionAsync({});
-    const destinationLat = 33.895;
-    const destinationLng = 35.506;
+    setUserLocation({ lat: location.coords.latitude, lng: location.coords.longitude });
 
-    const response = await fetch(`${API_BASE_URL}/rides`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authToken}`, // <- use token here
-      },
-      body: JSON.stringify({
-        origin_lat: location.coords.latitude,
-        origin_lng: location.coords.longitude,
-        destination_lat: destinationLat,
-        destination_lng: destinationLng,
-      }),
-    });
+    // Set booking mode to show UI
+    setIsBookingMode(true);
 
-    if (!response.ok) {
-      throw new Error('Failed to create ride request');
+    // Optional: set route start automatically to current location
+    const currentLocationMarker: Marker = {
+      id: 'pickup-location',
+      lat: location.coords.latitude,
+      lng: location.coords.longitude,
+      title: 'Pickup Location',
+      description: 'Your current location'
+    };
+    
+      setRouteStart(currentLocationMarker);
+      setIsBookingMode(true);
+      setIsRoutingMode(true);
+    } catch (error) {
+      console.error('Error getting current location:', error);
     }
-
-    const result = await response.json();
-    console.log('Ride request created:', result);
-
-  } catch (error) {
-    console.error('Error:', error);
-  }
-}, []);
-
+  }, []);
 
   const calculateBaseFare = useCallback((distance: number, duration: number): number => {
     const baseFare = 5000;
