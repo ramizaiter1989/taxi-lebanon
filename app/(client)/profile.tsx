@@ -10,7 +10,7 @@ import { API_BASE_URL } from '@/constants/config';
 export default function ClientProfileScreen() {
   const { user, logout } = useUser();
 
-  const handleLogout = () => {
+const handleLogout = () => {
   Alert.alert(
     'Logout',
     'Are you sure you want to logout?',
@@ -18,27 +18,31 @@ export default function ClientProfileScreen() {
       { text: 'Cancel', style: 'cancel' },
       { 
         text: 'Logout', 
-        onPress: async () => {
-          try {
-            const token = await AsyncStorage.getItem('token');
-            if (token) {
-              await axios.post(
-                `${API_BASE_URL}/logout`,
-                {},
-                { headers: { Authorization: `Bearer ${token}` } }
-              );
+        onPress: () => {
+          (async () => {
+            try {
+              const token = await AsyncStorage.getItem('token');
+              if (token) {
+                await axios.post(
+                  `${API_BASE_URL}/logout`,
+                  {},
+                  { headers: { Authorization: `Bearer ${token}` } }
+                );
+              }
+            } catch (error) {
+              console.log('Logout failed:', error);
+            } finally {
+              // Clear token and navigate regardless
+              await AsyncStorage.removeItem('token');
+              router.replace('/role-selection');
             }
-          } catch (error) {
-            console.log('Logout error:failed');
-          } finally {
-            await AsyncStorage.removeItem('token');
-            router.replace('/role-selection');
-          }
+          })();
         } 
       }
     ]
   );
 };
+
 
 
   return (
