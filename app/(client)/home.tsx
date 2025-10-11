@@ -342,7 +342,7 @@ export default function ClientHomeScreen() {
       {isLoading && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.loadingText}>Loading map...</Text>
+          <Text style={styles.loadingText}>Loading map.....</Text>
         </View>
       )}
 
