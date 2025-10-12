@@ -191,7 +191,7 @@ export default function LoginScreen() {
               </LinearGradient>
               <View style={styles.logoShadow} />
             </View>
-            <Text style={styles.title}>SafeRide</Text>
+            <Text style={styles.title}>Bella Ride</Text>
             <Text style={styles.subtitle}>Your trusted women's taxi service</Text>
           </View>
 

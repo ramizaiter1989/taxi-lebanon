@@ -236,7 +236,7 @@ export default function RegisterScreen() {
               </LinearGradient>
             </View>
             <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Start your SafeRide journey today.</Text>
+            <Text style={styles.subtitle}>Start your Bella Ride journey today.</Text>
           </View>
 
           {/* Role Selection */}
