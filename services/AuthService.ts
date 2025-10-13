@@ -45,6 +45,7 @@ export const register = async (formData: any) => {
   return response.data;
 };
 
+
 // Verify OTP
 export const verifyOtp = async (payload: OtpPayload): Promise<AuthResponse> => {
   const response = await axios.post(`${API_BASE_URL}/verify-otp`, payload);

@@ -96,91 +96,87 @@ export default function RegisterScreen() {
     transform: [{ scale: withSpring(vehicleNumberScale.value) }]
   }));
 
-  const handleRegister = async () => {
-  if (!name || !email || !password || !confirmPassword) {
-    Alert.alert('Error', 'Please fill all required fields.');
-    return;
-  }
+ const handleRegister = async () => {
+      if (!name || !email || !password || !confirmPassword) {
+        Alert.alert('Error', 'Please fill all required fields.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        Alert.alert('Error', 'Passwords do not match.');
+        return;
+      }
+      if (
+        role === 'driver' &&
+        (!licenseNumber ||
+          !vehicleNumber ||
+          !carPhotoFront ||
+          !carPhotoBack ||
+          !carPhotoLeft ||
+          !carPhotoRight ||
+          !licenseImage ||
+          !idImage ||
+          !insuranceImage)
+      ) {
+        Alert.alert('Error', 'Please complete all driver details and upload all required photos.');
+        return;
+      }
 
-  if (password !== confirmPassword) {
-    Alert.alert('Error', 'Passwords do not match.');
-    return;
-  }
+      setIsLoading(true);
+      try {
+        const formData = new FormData();
+        formData.append('name', name);
+        formData.append('email', email);
+        formData.append('phone', phone);
+        formData.append('password', password);
+        formData.append('password_confirmation', confirmPassword);
+        formData.append('role', role);
+        formData.append('gender', gender || '');
+        if (role === 'driver') {
+          formData.append('license_number', licenseNumber);
+          formData.append('vehicle_number', vehicleNumber);
+          const appendImage = (uri: string, fieldName: string) => {
+            const uriParts = uri.split('.');
+            const fileType = uriParts[uriParts.length - 1];
+            formData.append(fieldName, {
+              uri,
+              name: `${fieldName}.${fileType}`,
+              type: `image/${fileType}`,
+            } as any);
+          };
+          if (carPhotoFront) appendImage(carPhotoFront, 'car_photo_front');
+          if (carPhotoBack) appendImage(carPhotoBack, 'car_photo_back');
+          if (carPhotoLeft) appendImage(carPhotoLeft, 'car_photo_left');
+          if (carPhotoRight) appendImage(carPhotoRight, 'car_photo_right');
+          if (licenseImage) appendImage(licenseImage, 'license_image');
+          if (idImage) appendImage(idImage, 'id_image');
+          if (insuranceImage) appendImage(insuranceImage, 'insurance_image');
+        }
 
-  if (
-    role === 'driver' &&
-    (!licenseNumber ||
-      !vehicleNumber ||
-      !carPhotoFront ||
-      !carPhotoBack ||
-      !carPhotoLeft ||
-      !carPhotoRight ||
-      !licenseImage ||
-      !idImage ||
-      !insuranceImage)
-  ) {
-    Alert.alert('Error', 'Please complete all driver details and upload all required photos.');
-    return;
-  }
+        const response = await register(formData as any);
+        console.log('Register response:', response);
 
-  setIsLoading(true);
-
-  try {
-    const formData = new FormData();
-    formData.append('name', name);
-    formData.append('email', email);
-    formData.append('phone', phone);
-    formData.append('password', password);
-    formData.append('password_confirmation', confirmPassword);
-    formData.append('role', role);
-    formData.append('gender', gender || '');
-
-    if (role === 'driver') {
-      formData.append('license_number', licenseNumber);
-      formData.append('vehicle_number', vehicleNumber);
-
-      const appendImage = (uri: string, fieldName: string) => {
-        const uriParts = uri.split('.');
-        const fileType = uriParts[uriParts.length - 1];
-        formData.append(fieldName, {
-          uri,
-          name: `${fieldName}.${fileType}`,
-          type: `image/${fileType}`,
-        } as any);
-      };
-
-      if (carPhotoFront) appendImage(carPhotoFront, 'car_photo_front');
-      if (carPhotoBack) appendImage(carPhotoBack, 'car_photo_back');
-      if (carPhotoLeft) appendImage(carPhotoLeft, 'car_photo_left');
-      if (carPhotoRight) appendImage(carPhotoRight, 'car_photo_right');
-      if (licenseImage) appendImage(licenseImage, 'license_image');
-      if (idImage) appendImage(idImage, 'id_image');
-      if (insuranceImage) appendImage(insuranceImage, 'insurance_image');
-    }
-
-    const response = await register(formData as any);
-    console.log('Register response:', response);
-
-    // ✅ Redirect to verify-otp page automatically if phone is provided
-    if (phone) {
-      router.replace(`/verify-otp?phone=${phone.trim()}&role=${role}`);
-    } else {
-      Alert.alert('Success', 'Registration completed successfully!');
-      router.replace('/login');
-    }
-  } catch (error: any) {
-    let errorMessage = 'Registration failed.';
-    if (axios.isAxiosError(error)) {
-      errorMessage = error.response?.data?.message || error.message;
-    }
-    Alert.alert('Error', errorMessage);
-  } finally {
-    setIsLoading(false);
-  }
+        // ✅ Handle OTP errors
+        if (response.error) {
+          Alert.alert('OTP Error', response.error);
+        } else if (phone) {
+          router.replace(`/verify-otp?phone=${phone.trim()}&role=${role}`);
+        } else {
+          Alert.alert('Success', 'Registration completed successfully!');
+          router.replace('/login');
+        }
+      } catch (error: any) {
+        let errorMessage = 'Registration failed.';
+        if (axios.isAxiosError(error)) {
+          errorMessage = error.response?.data?.message || error.message;
+          if (error.response?.data?.error) {
+            errorMessage = error.response.data.error;
+          }
+        }
+        Alert.alert('Error', errorMessage);
+      } finally {
+        setIsLoading(false);
+      }
 };
-
-
-
 
   const pickImage = async (setter: (uri: string | null) => void) => {
     const result = await ImagePicker.launchImageLibraryAsync({
