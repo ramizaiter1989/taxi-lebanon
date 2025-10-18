@@ -56,6 +56,14 @@ export default function ClientTabsLayout() {
           tabBarIcon: ({ color, size }) => <Settings color={color} size={size} />,
         }}
       />
+      <Tabs.Screen 
+  name="testChat" 
+  options={{ 
+    title: 'Chat Test', 
+    tabBarButton: () => null // hides it from tab bar
+  }} 
+/>
+
       
             {/* 🚫 Hidden tabs (internal screens) */}
       <Tabs.Screen name="profile" options={{ href: null }} />

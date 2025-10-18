@@ -1,0 +1,50 @@
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../constants/config';
+
+const getAuthHeaders = async () => {
+  const token = await AsyncStorage.getItem('token');
+  if (!token) throw new Error('No auth token found');
+  return {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  };
+};
+
+export const chatService = {
+  async getMessages() { // Removed rideId parameter since it's hardcoded
+    try {
+      const { headers } = await getAuthHeaders();
+      const rideId = 4; // Hardcoded rideId for testing
+      const response = await axios.get(`${API_BASE_URL}/chat/${rideId}`, { headers });
+      return response.data;
+    } catch (error: any) {
+      console.error('Get messages error:', error.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  async sendMessage(message: string) { // Removed rideId parameter since it's hardcoded
+    try {
+      const { headers } = await getAuthHeaders();
+      const rideId = 4; // Hardcoded rideId for testing
+      const payload = {
+        ride_id: rideId,
+        message,
+      };
+      console.log('Sending chat:', payload);
+      const response = await axios.post(`${API_BASE_URL}/chat`, payload, { headers });
+      console.log('Message sent:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Send message error details:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message,
+      });
+      throw error;
+    }
+  },
+};

@@ -28,7 +28,13 @@ import { useMap } from '@/providers/MapProvider';
 import { useUser } from '@/hooks/user-store';
 import { LinearGradient } from 'expo-linear-gradient';
 
+
+
+
 export default function ClientHomeScreen() {
+
+const rideId = 4; 
+
   const router = useRouter();
   const webViewRef = useRef<WebView>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -230,7 +236,12 @@ export default function ClientHomeScreen() {
             </LinearGradient>
           </TouchableOpacity>
         </View>
-
+<TouchableOpacity
+  style={{ backgroundColor: '#007AFF', padding: 12, borderRadius: 8 }}
+  onPress={() => router.push('./TestChat')}
+>
+  <Text style={{ color: 'white' }}>Open Chat</Text>
+</TouchableOpacity>
         <View style={styles.controlsRight}>
           <TouchableOpacity style={styles.controlButton} onPress={zoomIn}>
             <Plus size={24} color="#333" />

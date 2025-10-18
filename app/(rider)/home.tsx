@@ -1,94 +1,157 @@
-
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Power, MapPin, Navigation, Clock, DollarSign, Phone, AlertTriangle } from 'lucide-react-native';
+import { WebView } from 'react-native-webview';
+import { Power, MapPin, Navigation, Clock, DollarSign, Phone, AlertTriangle, Zap } from 'lucide-react-native';
 import { useRide } from '@/hooks/ride-store';
 import { useUser } from '@/hooks/user-store';
 import { useMap } from '@/providers/MapProvider';
-import MapView from '../../components/MapView';
 import { Location } from '@/types/user';
 import * as LocationService from 'expo-location';
+import mapHTML from '@/utils/mapHTML';
+import { useRouter } from 'expo-router';
 
+// --- Types ---
+type RideStatus = 'accepted' | 'in_progress' | 'started' | 'completed';
 
+// --- Component ---
 export default function RiderHomeScreen() {
+
+  const router = useRouter();
+   const rideId = 4; 
+  // --- State and Refs ---
   const { user } = useUser();
-  const { isDriverOnline, toggleDriverOnline, currentRide, acceptRide, updateRideStatus, updateDriverLocation, triggerSOSAlert } = useRide();
+  const {
+    isDriverOnline,
+    toggleDriverOnline,
+    currentRide,
+    acceptRide,
+    updateRideStatus,
+    updateDriverLocation,
+    triggerSOSAlert,
+  } = useRide();
   const { setUserLocation } = useMap();
   const [hasIncomingRequest, setHasIncomingRequest] = useState(false);
   const [showMap, setShowMap] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const webViewRef = useRef<WebView>(null);
+  const [localUserLocation, setLocalUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [currentLocation, setCurrentLocation] = useState<Location>({
     latitude: 33.8938,
     longitude: 35.5018,
-    address: 'Current Location'
+    address: 'Current Location',
   });
 
-  // Track driver location
- useEffect(() => {
-  let locationSubscription: LocationService.LocationSubscription | null = null;
+  // --- Location Tracking ---
+  useEffect(() => {
+    let locationSubscription: LocationService.LocationSubscription | null = null;
+    const startLocationTracking = async () => {
+      try {
+        const { status } = await LocationService.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          console.log('Location permission denied');
+          return;
+        }
+        const location = await LocationService.getCurrentPositionAsync({
+          accuracy: LocationService.Accuracy.High,
+        });
 
-  const startLocationTracking = async () => {
-    const { status } = await LocationService.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      console.log('Location permission denied');
-      return;
-    }
+        const coords = {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          address: 'Current Location',
+        };
+        const mapCoords = { lat: location.coords.latitude, lng: location.coords.longitude };
 
-    try {
-      // Get initial location
-      const location = await LocationService.getCurrentPositionAsync({});
-      const coords = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        address: 'Current Location',
-      };
-      setCurrentLocation(coords);
-      setUserLocation({ lat: coords.latitude, lng: coords.longitude });
-      updateDriverLocation(coords);
+        setCurrentLocation(coords);
+        setLocalUserLocation(mapCoords);
+        setUserLocation(mapCoords);
+        updateDriverLocation(coords);
 
-      // Watch location changes if driver is online
-      if (isDriverOnline) {
-        locationSubscription = await LocationService.watchPositionAsync(
-          {
-            accuracy: LocationService.Accuracy.High,
-            timeInterval: 10000,
-            distanceInterval: 50,
-          },
-          (location) => {
-            const newCoords = {
-              latitude: location.coords.latitude,
-              longitude: location.coords.longitude,
-              address: 'Current Location',
-            };
-            setCurrentLocation(newCoords);
-            setUserLocation({ lat: newCoords.latitude, lng: newCoords.longitude });
-            updateDriverLocation(newCoords);
-          }
-        );
+        if (webViewRef.current) {
+          webViewRef.current.postMessage(JSON.stringify({ type: 'setUserLocation', ...mapCoords }));
+        }
+
+        if (isDriverOnline) {
+          locationSubscription = await LocationService.watchPositionAsync(
+            {
+              accuracy: LocationService.Accuracy.High,
+              timeInterval: 10000,
+              distanceInterval: 50,
+            },
+            (location) => {
+              const newCoords = {
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+                address: 'Current Location',
+              };
+              const newMapCoords = { lat: location.coords.latitude, lng: location.coords.longitude };
+
+              setCurrentLocation(newCoords);
+              setLocalUserLocation(newMapCoords);
+              setUserLocation(newMapCoords);
+              updateDriverLocation(newCoords);
+
+              if (webViewRef.current) {
+                webViewRef.current.postMessage(JSON.stringify({ type: 'setUserLocation', ...newMapCoords }));
+              }
+            }
+          );
+        }
+      } catch (error) {
+        console.error('Error getting location:', error);
       }
+    };
+
+    startLocationTracking();
+
+    return () => {
+      if (locationSubscription && typeof locationSubscription.remove === 'function') {
+        locationSubscription.remove();
+      }
+    };
+  }, [isDriverOnline, setUserLocation, updateDriverLocation]);
+
+  // --- Map Route Handling ---
+  useEffect(() => {
+    if (currentRide && webViewRef.current) {
+      webViewRef.current.postMessage(JSON.stringify({
+        type: 'showRoute',
+        start: { lat: currentRide.pickup.latitude, lng: currentRide.pickup.longitude },
+        end: { lat: currentRide.dropoff.latitude, lng: currentRide.dropoff.longitude },
+      }));
+
+      webViewRef.current.postMessage(JSON.stringify({
+        type: 'addRouteMarker',
+        lat: currentRide.pickup.latitude,
+        lng: currentRide.pickup.longitude,
+        markerType: 'start',
+      }));
+
+      webViewRef.current.postMessage(JSON.stringify({
+        type: 'addRouteMarker',
+        lat: currentRide.dropoff.latitude,
+        lng: currentRide.dropoff.longitude,
+        markerType: 'end',
+      }));
+    }
+  }, [currentRide]);
+
+  // --- Handlers ---
+  const handleMapMessage = (event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      console.log('Map message:', data);
     } catch (error) {
-      console.error('Error getting location:', error);
+      console.error('Error parsing map message:', error);
     }
   };
-
-  startLocationTracking();
-
-  return () => {
-    if (locationSubscription && typeof locationSubscription.remove === 'function') {
-      locationSubscription.remove();
-    }
-  };
-}, [isDriverOnline, setUserLocation, updateDriverLocation]);
-
 
   const handleToggleOnline = () => {
     toggleDriverOnline();
     if (!isDriverOnline) {
-      // Simulate incoming ride request after going online
-      setTimeout(() => {
-        setHasIncomingRequest(true);
-      }, 5000);
+      setTimeout(() => setHasIncomingRequest(true), 5000);
     } else {
       setHasIncomingRequest(false);
     }
@@ -96,7 +159,6 @@ export default function RiderHomeScreen() {
 
   const handleAcceptRide = () => {
     setHasIncomingRequest(false);
-    // Simulate accepting a ride
     const mockRide = {
       id: Date.now().toString(),
       clientId: '1',
@@ -105,7 +167,7 @@ export default function RiderHomeScreen() {
       status: 'accepted' as const,
       fare: 8500,
       estimatedDuration: 15,
-      createdAt: new Date()
+      createdAt: new Date(),
     };
     acceptRide(mockRide.id, user?.id || '2');
     setShowMap(true);
@@ -116,11 +178,14 @@ export default function RiderHomeScreen() {
     Alert.alert('Ride Declined', 'Looking for another ride request...');
   };
 
-  const handleUpdateStatus = (status: 'on_way' | 'started' | 'completed') => {
+  const handleUpdateStatus = (status: RideStatus) => {
     updateRideStatus(status);
     if (status === 'completed') {
       Alert.alert('Ride Completed', 'Great job! Payment has been processed.');
       setShowMap(false);
+      if (webViewRef.current) {
+        webViewRef.current.postMessage(JSON.stringify({ type: 'clearRoute' }));
+      }
     }
   };
 
@@ -130,19 +195,20 @@ export default function RiderHomeScreen() {
       'This will send an emergency alert to authorities and the passenger. Continue?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Send SOS', 
+        {
+          text: 'Send SOS',
           style: 'destructive',
-          onPress: () => triggerSOSAlert(currentLocation)
-        }
+          onPress: () => triggerSOSAlert(currentLocation),
+        },
       ]
     );
   };
 
-  const getStatusColor = () => {
-    if (!isDriverOnline) return '#6b7280';
-    if (currentRide) return '#8b5cf6';
-    return '#10b981';
+  // --- UI Helpers ---
+  const getStatusColor = (): readonly [string, string] => {
+    if (!isDriverOnline) return ['#4b5563', '#374151'];
+    if (currentRide) return ['#a855f7', '#9333ea'];
+    return ['#ec4899', '#db2777'];
   };
 
   const getStatusText = () => {
@@ -150,7 +216,7 @@ export default function RiderHomeScreen() {
     if (currentRide) {
       switch (currentRide.status) {
         case 'accepted': return 'Ride accepted - Navigate to pickup';
-        case 'on_way': return 'On the way to pickup';
+        case 'in_progress': return 'On the way to pickup';
         case 'started': return 'Trip in progress';
         default: return 'Available for rides';
       }
@@ -158,329 +224,338 @@ export default function RiderHomeScreen() {
     return 'Available for rides';
   };
 
-  // Map view during active ride
+  // --- Render Map View ---
   if (showMap && currentRide) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.mapContainer}>
-          <MapView
-            pickup={currentRide.pickup}
-            dropoff={currentRide.dropoff}
-            driverLocation={currentLocation}
-            showRoute={true}
-            testID="rider-map"
-          />
-          
-          <View style={styles.mapOverlay}>
-            <View style={[styles.statusContainer, { backgroundColor: getStatusColor() }]}>
-              <Text style={styles.statusText}>{getStatusText()}</Text>
-            </View>
-            
-            <View style={styles.navigationCard}>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.overlay}>
+          <LinearGradient
+            colors={getStatusColor()}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.statusContainerMap}
+          >
+            <Text style={styles.statusText}>{getStatusText()}</Text>
+          </LinearGradient>
+          <View style={styles.navigationCard}>
+            <LinearGradient colors={['#1f1f1f', '#2d2d2d']} style={styles.navigationCardGradient}>
               <Text style={styles.navigationTitle}>
-                {currentRide.status === 'accepted' ? 'Navigate to Pickup' : 
-                 currentRide.status === 'on_way' ? 'Pickup Passenger' :
+                {currentRide.status === 'accepted' ? 'Navigate to Pickup' :
+                 currentRide.status === 'in_progress' ? 'Pickup Passenger' :
                  'Navigate to Destination'}
               </Text>
               <Text style={styles.navigationAddress}>
                 {currentRide.status === 'started' ? currentRide.dropoff.address : currentRide.pickup.address}
               </Text>
-              
               <View style={styles.navigationActions}>
                 <TouchableOpacity style={styles.callButton}>
-                  <Phone size={16} color="white" />
-                  <Text style={styles.callButtonText}>Call Passenger</Text>
+                  <LinearGradient colors={['#ec4899', '#db2777']} style={styles.actionButtonGradient}>
+                    <Phone size={16} color="white" />
+                    <Text style={styles.callButtonText}>Call</Text>
+                  </LinearGradient>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.sosButton} onPress={handleSOSPress}>
-                  <AlertTriangle size={16} color="white" />
-                  <Text style={styles.sosButtonText}>SOS</Text>
+                  <LinearGradient colors={['#dc2626', '#b91c1c']} style={styles.actionButtonGradient}>
+                    <AlertTriangle size={16} color="white" />
+                    <Text style={styles.sosButtonText}>SOS</Text>
+                  </LinearGradient>
                 </TouchableOpacity>
               </View>
-            </View>
-            
-            <View style={styles.rideActions}>
-              {currentRide.status === 'accepted' && (
-                <TouchableOpacity
-                  style={styles.statusButton}
-                  onPress={() => handleUpdateStatus('on_way')}
-                >
-                  <LinearGradient
-                    colors={['#8b5cf6', '#7c3aed']}
-                    style={styles.statusButtonGradient}
-                  >
-                    <Text style={styles.statusButtonText}>I'm on my way</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              )}
-              {currentRide.status === 'on_way' && (
-                <TouchableOpacity
-                  style={styles.statusButton}
-                  onPress={() => handleUpdateStatus('started')}
-                >
-                  <LinearGradient
-                    colors={['#8b5cf6', '#7c3aed']}
-                    style={styles.statusButtonGradient}
-                  >
-                    <Text style={styles.statusButtonText}>Start Trip</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              )}
-              {currentRide.status === 'started' && (
-                <TouchableOpacity
-                  style={styles.statusButton}
-                  onPress={() => handleUpdateStatus('completed')}
-                >
-                  <LinearGradient
-                    colors={['#10b981', '#059669']}
-                    style={styles.statusButtonGradient}
-                  >
-                    <Text style={styles.statusButtonText}>Complete Trip</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              )}
-            </View>
+            </LinearGradient>
+          </View>
+          <View style={styles.rideActionsMap}>
+            {currentRide.status === 'accepted' && (
+              <TouchableOpacity style={styles.statusButton} onPress={() => handleUpdateStatus('in_progress')}>
+                <LinearGradient colors={['#ec4899', '#db2777']} style={styles.statusButtonGradient}>
+                  <Text style={styles.statusButtonText}>I'm on my way</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+            {currentRide.status === 'in_progress' && (
+              <TouchableOpacity style={styles.statusButton} onPress={() => handleUpdateStatus('started')}>
+                <LinearGradient colors={['#ec4899', '#db2777']} style={styles.statusButtonGradient}>
+                  <Text style={styles.statusButtonText}>Start Trip</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+            {currentRide.status === 'started' && (
+              <TouchableOpacity style={styles.statusButton} onPress={() => handleUpdateStatus('completed')}>
+                <LinearGradient colors={['#10b981', '#059669']} style={styles.statusButtonGradient}>
+                  <Text style={styles.statusButtonText}>Complete Trip</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
+
+        <WebView
+          ref={webViewRef}
+          source={{ html: mapHTML }}
+          style={styles.map}
+          onMessage={handleMapMessage}
+          onLoadEnd={() => {
+            setIsLoading(false);
+            if (localUserLocation) {
+              webViewRef.current?.postMessage(JSON.stringify({ type: 'setUserLocation', ...localUserLocation }));
+              webViewRef.current?.postMessage(JSON.stringify({ type: 'setView', ...localUserLocation, zoom: 15 }));
+            }
+          }}
+          javaScriptEnabled
+          domStorageEnabled
+          originWhitelist={['*']}
+          onError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            console.error('WebView error: ', nativeEvent);
+          }}
+        />
+
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#ec4899" />
+            <Text style={styles.loadingText}>Loading map...</Text>
+          </View>
+        )}
       </SafeAreaView>
     );
   }
-  // Main driver dashboard
+
+  // --- Render Main Dashboard ---
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <LinearGradient
-        colors={isDriverOnline ? ['#10b981', '#059669'] : ['#6b7280', '#4b5563']}
+        colors={isDriverOnline ? ['#831843', '#9d174d', '#be185d'] : ['#1f1f1f', '#2d2d2d', '#3d3d3d']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
         style={styles.header}
       >
-        <Text style={styles.greeting}>Hello, {user?.name}!</Text>
-        <Text style={styles.subtitle}>
-          {isDriverOnline ? 'You are online and ready to drive' : 'Go online to start earning'}
-        </Text>
+        <View style={styles.headerContent}>
+          <View style={styles.headerTop}>
+            <View style={styles.greetingContainer}>
+              <Text style={styles.greeting}>Hello, {user?.name}! ✨</Text>
+              <Text style={styles.subtitle}>
+                {isDriverOnline ? 'You are online and ready to drive' : 'Go online to start earning'}
+              </Text>
+            </View>
+            {isDriverOnline && (
+              <View style={styles.onlinePulse}>
+                <Zap size={20} color="#fbbf24" fill="#fbbf24" />
+              </View>
+            )}
+          </View>
+        </View>
       </LinearGradient>
+<View style={{ margin: 20 }}>
+  <TouchableOpacity
+    style={{
+      backgroundColor: '#007AFF',
+      padding: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+    }}
+    onPress={() => router.push('./TestChat')}
+  >
+    <Text style={{ color: 'white', fontWeight: 'bold' }}>Open Chat</Text>
+  </TouchableOpacity>
+</View>
 
       <View style={styles.content}>
-        <View style={[styles.statusContainer, { backgroundColor: getStatusColor() }]}>
+        <LinearGradient colors={getStatusColor()} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.statusContainer}>
           <Text style={styles.statusText}>{getStatusText()}</Text>
-        </View>
+        </LinearGradient>
 
-        <TouchableOpacity
-          style={styles.toggleButton}
-          onPress={handleToggleOnline}
-          testID="toggle-online-button"
-        >
-          <LinearGradient
-            colors={isDriverOnline ? ['#ef4444', '#dc2626'] : ['#10b981', '#059669']}
-            style={styles.toggleButtonGradient}
-          >
+        <TouchableOpacity style={styles.toggleButton} onPress={handleToggleOnline} testID="toggle-online-button">
+          <LinearGradient colors={isDriverOnline ? ['#dc2626', '#b91c1c'] : ['#ec4899', '#db2777']} style={styles.toggleButtonGradient}>
             <Power size={24} color="white" />
-            <Text style={styles.toggleButtonText}>
-              {isDriverOnline ? 'Go Offline' : 'Go Online'}
-            </Text>
+            <Text style={styles.toggleButtonText}>{isDriverOnline ? 'Go Offline' : 'Go Online'}</Text>
           </LinearGradient>
         </TouchableOpacity>
 
-        {hasIncomingRequest && (
-          <View style={styles.requestContainer}>
-            <Text style={styles.requestTitle}>New Ride Request!</Text>
-            
-            <View style={styles.requestDetails}>
-              <View style={styles.locationItem}>
-                <MapPin size={16} color="#10b981" />
-                <Text style={styles.locationText}>Pickup: Hamra, Beirut</Text>
-              </View>
-              <View style={styles.locationItem}>
-                <Navigation size={16} color="#ef4444" />
-                <Text style={styles.locationText}>Dropoff: Achrafieh, Beirut</Text>
-              </View>
-              <View style={styles.locationItem}>
-                <DollarSign size={16} color="#6366f1" />
-                <Text style={styles.locationText}>Fare: 8,500 LBP</Text>
-              </View>
-              <View style={styles.locationItem}>
-                <Clock size={16} color="#f59e0b" />
-                <Text style={styles.locationText}>Distance: 3.2 km</Text>
-              </View>
-            </View>
-
-            <View style={styles.requestActions}>
-              <TouchableOpacity
-                style={styles.declineButton}
-                onPress={handleDeclineRide}
-              >
-                <Text style={styles.declineButtonText}>Decline</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.acceptButton}
-                onPress={handleAcceptRide}
-              >
-                <Text style={styles.acceptButtonText}>Accept</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {currentRide && (
-          <View style={styles.activeRideContainer}>
-            <Text style={styles.activeRideTitle}>Current Ride</Text>
-            
-            <TouchableOpacity 
-              style={styles.viewMapButton}
-              onPress={() => setShowMap(true)}
-            >
-              <Text style={styles.viewMapButtonText}>View Navigation</Text>
-            </TouchableOpacity>
-            
-            <View style={styles.rideInfo}>
-              <View style={styles.locationItem}>
-                <MapPin size={16} color="#10b981" />
-                <Text style={styles.locationText}>{currentRide.pickup.address}</Text>
-              </View>
-              <View style={styles.locationItem}>
-                <Navigation size={16} color="#ef4444" />
-                <Text style={styles.locationText}>{currentRide.dropoff.address}</Text>
-              </View>
-              <View style={styles.locationItem}>
-                <DollarSign size={16} color="#6366f1" />
-                <Text style={styles.locationText}>{currentRide.fare} LBP</Text>
-              </View>
-            </View>
-
-            <View style={styles.driverActions}>
-              <TouchableOpacity style={styles.callButton}>
-                <Phone size={16} color="white" />
-                <Text style={styles.callButtonText}>Call</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.sosButton} onPress={handleSOSPress}>
-                <AlertTriangle size={16} color="white" />
-                <Text style={styles.sosButtonText}>SOS</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.rideActions}>
-              {currentRide.status === 'accepted' && (
-                <TouchableOpacity
-                  style={styles.statusButton}
-                  onPress={() => handleUpdateStatus('on_way')}
-                >
-                  <Text style={styles.statusButtonText}>I&apos;m on my way</Text>
-                </TouchableOpacity>
-              )}
-              {currentRide.status === 'on_way' && (
-                <TouchableOpacity
-                  style={styles.statusButton}
-                  onPress={() => handleUpdateStatus('started')}
-                >
-                  <Text style={styles.statusButtonText}>Start Trip</Text>
-                </TouchableOpacity>
-              )}
-              {currentRide.status === 'started' && (
-                <TouchableOpacity
-                  style={[styles.statusButton, { backgroundColor: '#10b981' }]}
-                  onPress={() => handleUpdateStatus('completed')}
-                >
-                  <Text style={styles.statusButtonText}>Complete Trip</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        )}
-
-        {isDriverOnline && !hasIncomingRequest && !currentRide && (
-          <View style={styles.waitingContainer}>
-            <Text style={styles.waitingText}>Waiting for ride requests...</Text>
-            <Text style={styles.waitingSubtext}>Stay nearby for faster pickups</Text>
-          </View>
-        )}
+        {hasIncomingRequest && <RideRequestCard onAccept={handleAcceptRide} onDecline={handleDeclineRide} />}
+        {currentRide && !showMap && <ActiveRideCard ride={currentRide} onSOSPress={handleSOSPress} onViewMap={() => setShowMap(true)} onUpdateStatus={handleUpdateStatus} />}
+        {isDriverOnline && !hasIncomingRequest && !currentRide && <WaitingForRide />}
       </View>
     </SafeAreaView>
   );
 }
 
+// --- Subcomponents ---
+const RideRequestCard = ({ onAccept, onDecline }: { onAccept: () => void; onDecline: () => void }) => (
+  <View style={styles.requestContainer}>
+    <LinearGradient colors={['#1f1f1f', '#2d2d2d']} style={styles.requestGradient}>
+      <View style={styles.requestHeader}>
+        <LinearGradient colors={['#ec4899', '#f472b6']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.requestBadge}>
+          <Text style={styles.requestTitle}>New Ride Request! 🚗</Text>
+        </LinearGradient>
+      </View>
+      <View style={styles.requestDetails}>
+        <LocationItem icon={<MapPin size={16} color="#ec4899" />} label="Pickup" text="Hamra, Beirut" />
+        <View style={styles.routeDivider} />
+        <LocationItem icon={<Navigation size={16} color="#f472b6" />} label="Drop-off" text="Achrafieh, Beirut" />
+        <View style={styles.rideMetrics}>
+          <MetricItem icon={<DollarSign size={18} color="#fbbf24" />} text="8,500 LBP" />
+          <MetricItem icon={<Clock size={18} color="#a78bfa" />} text="3.2 km" />
+        </View>
+      </View>
+      <View style={styles.requestActions}>
+        <TouchableOpacity style={styles.declineButton} onPress={onDecline}>
+          <LinearGradient colors={['#374151', '#4b5563']} style={styles.actionButtonGradient}>
+            <Text style={styles.declineButtonText}>Decline</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.acceptButton} onPress={onAccept}>
+          <LinearGradient colors={['#ec4899', '#db2777']} style={styles.actionButtonGradient}>
+            <Text style={styles.acceptButtonText}>Accept Ride</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    </LinearGradient>
+  </View>
+);
 
+const ActiveRideCard = ({ ride, onSOSPress, onViewMap, onUpdateStatus }: {
+  ride: any;
+  onSOSPress: () => void;
+  onViewMap: () => void;
+  onUpdateStatus: (status: RideStatus) => void;
+}) => (
+  <View style={styles.activeRideContainer}>
+    <LinearGradient colors={['#1f1f1f', '#2d2d2d']} style={styles.activeRideGradient}>
+      <View style={styles.activeRideHeader}>
+        <Text style={styles.activeRideTitle}>Current Ride</Text>
+        <View style={styles.activeRideBadge}>
+          <View style={styles.pulseDot} />
+          <Text style={styles.activeRideBadgeText}>In Progress</Text>
+        </View>
+      </View>
+      <TouchableOpacity style={styles.viewMapButton} onPress={onViewMap}>
+        <LinearGradient colors={['#ec4899', '#db2777']} style={styles.viewMapButtonGradient}>
+          <Navigation size={18} color="white" />
+          <Text style={styles.viewMapButtonText}>View Navigation</Text>
+        </LinearGradient>
+      </TouchableOpacity>
+      <View style={styles.rideInfo}>
+        <LocationItem icon={<MapPin size={16} color="#ec4899" />} text={ride.pickup.address} />
+        <LocationItem icon={<Navigation size={16} color="#f472b6" />} text={ride.dropoff.address} />
+        <LocationItem icon={<DollarSign size={16} color="#fbbf24" />} text={`${ride.fare} LBP`} />
+      </View>
+      <View style={styles.driverActions}>
+        <TouchableOpacity style={styles.callButton}>
+          <LinearGradient colors={['#ec4899', '#db2777']} style={styles.actionButtonGradient}>
+            <Phone size={16} color="white" />
+            <Text style={styles.callButtonText}>Call</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.sosButton} onPress={onSOSPress}>
+          <LinearGradient colors={['#dc2626', '#b91c1c']} style={styles.actionButtonGradient}>
+            <AlertTriangle size={16} color="white" />
+            <Text style={styles.sosButtonText}>SOS</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.rideActions}>
+        {ride.status === 'accepted' && (
+          <TouchableOpacity style={styles.statusButton} onPress={() => onUpdateStatus('in_progress')}>
+            <LinearGradient colors={['#ec4899', '#db2777']} style={styles.statusButtonGradient}>
+              <Text style={styles.statusButtonText}>I'm on my way</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+        {ride.status === 'in_progress' && (
+          <TouchableOpacity style={styles.statusButton} onPress={() => onUpdateStatus('started')}>
+            <LinearGradient colors={['#ec4899', '#db2777']} style={styles.statusButtonGradient}>
+              <Text style={styles.statusButtonText}>Start Trip</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+        {ride.status === 'started' && (
+          <TouchableOpacity style={styles.statusButton} onPress={() => onUpdateStatus('completed')}>
+            <LinearGradient colors={['#10b981', '#059669']} style={styles.statusButtonGradient}>
+              <Text style={styles.statusButtonText}>Complete Trip</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+      </View>
+    </LinearGradient>
+  </View>
+);
+
+const WaitingForRide = () => (
+  <View style={styles.waitingContainer}>
+    <LinearGradient colors={['#1f1f1f', '#2d2d2d']} style={styles.waitingGradient}>
+      <View style={styles.waitingPulse}>
+        <Zap size={32} color="#ec4899" fill="#ec4899" />
+      </View>
+      <Text style={styles.waitingText}>Waiting for ride requests...</Text>
+      <Text style={styles.waitingSubtext}>Stay nearby for faster pickups</Text>
+    </LinearGradient>
+  </View>
+);
+
+const LocationItem = ({ icon, label, text }: { icon: React.ReactNode; label?: string; text: string }) => (
+  <View style={styles.locationItem}>
+    <View style={styles.iconCircle}>{icon}</View>
+    {label && <Text style={styles.locationLabel}>{label}</Text>}
+    <Text style={styles.locationText}>{text}</Text>
+  </View>
+);
+
+const MetricItem = ({ icon, text }: { icon: React.ReactNode; text: string }) => (
+  <View style={styles.metricItem}>
+    {icon}
+    <Text style={styles.metricText}>{text}</Text>
+  </View>
+);
+
+// --- Styles ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#0a0a0a',
   },
-  mapContainer: {
-    flex: 1,
-  },
-  mapOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
     pointerEvents: 'box-none',
-    padding: 20,
   },
-  navigationCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
-    marginTop: 80,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+  map: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
   },
-  navigationTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 8,
-  },
-  navigationAddress: {
-    fontSize: 16,
-    color: '#6b7280',
-    marginBottom: 16,
-  },
-  navigationActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  statusButtonGradient: {
-  borderRadius: 12,
-  padding: 16,
-  alignItems: 'center',
-  justifyContent: 'center',
-},
-  sosButton: {
-    flexDirection: 'row',
+  loadingContainer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(10, 10, 10, 0.9)',
     alignItems: 'center',
-    backgroundColor: '#ef4444',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    justifyContent: 'center',
+    zIndex: 999,
   },
-  sosButtonText: {
-    color: 'white',
-    marginLeft: 4,
-    fontWeight: '600',
-  },
-  viewMapButton: {
-    backgroundColor: '#6366f1',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  viewMapButtonText: {
-    color: 'white',
+  loadingText: {
+    color: '#ec4899',
     fontSize: 16,
     fontWeight: '600',
-  },
-  driverActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
+    marginTop: 12,
   },
   header: {
-    padding: 24,
-    paddingTop: 60,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  headerContent: {
+    paddingTop: 8,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  greetingContainer: {
+    flex: 1,
   },
   greeting: {
     fontSize: 24,
@@ -489,64 +564,105 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   subtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontWeight: '500',
+  },
+  onlinePulse: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(251, 191, 36, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
     flex: 1,
-    padding: 24,
+    padding: 20,
   },
   statusContainer: {
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 16,
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  statusContainerMap: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    right: 20,
+    borderRadius: 14,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+    pointerEvents: 'auto',
   },
   statusText: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
   },
   toggleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     borderRadius: 16,
-    padding: 18,
-    marginBottom: 24,
+    marginBottom: 20,
+    overflow: 'hidden',
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
   },
   toggleButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 12,
-    borderRadius: 16,
+    padding: 18,
   },
   toggleButtonText: {
     color: 'white',
     fontSize: 18,
     fontWeight: 'bold',
-    marginLeft: 8,
+    marginLeft: 10,
   },
   requestContainer: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 18,
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+    overflow: 'hidden',
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  requestGradient: {
+    padding: 20,
     borderWidth: 2,
-    borderColor: '#10b981',
+    borderColor: '#ec4899',
+    borderRadius: 18,
+  },
+  requestHeader: {
+    marginBottom: 18,
+  },
+  requestBadge: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center',
   },
   requestTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 16,
-    textAlign: 'center',
+    color: 'white',
   },
   requestDetails: {
     marginBottom: 20,
@@ -554,12 +670,60 @@ const styles = StyleSheet.create({
   locationItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
+  },
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(236, 72, 153, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  locationTextContainer: {
+    flex: 1,
+  },
+  locationLabel: {
+    fontSize: 11,
+    color: '#9ca3af',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    marginBottom: 2,
   },
   locationText: {
-    marginLeft: 8,
+    fontSize: 15,
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  routeDivider: {
+    width: 2,
+    height: 20,
+    backgroundColor: '#374151',
+    marginLeft: 17,
+    marginVertical: 4,
+  },
+  rideMetrics: {
+    flexDirection: 'row',
+    gap: 20,
+    marginTop: 12,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#374151',
+  },
+  metricItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(236, 72, 153, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  metricText: {
+    marginLeft: 6,
     fontSize: 14,
-    color: '#374151',
+    color: '#ffffff',
+    fontWeight: '700',
   },
   requestActions: {
     flexDirection: 'row',
@@ -567,95 +731,206 @@ const styles = StyleSheet.create({
   },
   declineButton: {
     flex: 1,
-    backgroundColor: '#ef4444',
     borderRadius: 12,
-    padding: 16,
+    overflow: 'hidden',
+  },
+  acceptButton: {
+    flex: 2,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  actionButtonGradient: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
   },
   declineButtonText: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  acceptButton: {
-    flex: 1,
-    backgroundColor: '#10b981',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
+    fontSize: 15,
+    fontWeight: '700',
   },
   acceptButtonText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   activeRideContainer: {
-    backgroundColor: 'white',
-    borderRadius: 16,
+    borderRadius: 18,
+    overflow: 'hidden',
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  activeRideGradient: {
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    borderWidth: 2,
+    borderColor: '#ec4899',
+    borderRadius: 18,
+  },
+  activeRideHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   activeRideTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1f2937',
+    color: '#ffffff',
+  },
+  activeRideBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(236, 72, 153, 0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  pulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ec4899',
+    marginRight: 6,
+  },
+  activeRideBadgeText: {
+    color: '#ec4899',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  viewMapButton: {
+    borderRadius: 12,
     marginBottom: 16,
+    overflow: 'hidden',
+  },
+  viewMapButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  viewMapButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: 8,
   },
   rideInfo: {
     marginBottom: 16,
   },
   callButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#6366f1',
+    flex: 1,
     borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
+    overflow: 'hidden',
   },
   callButtonText: {
     color: 'white',
     marginLeft: 8,
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  sosButton: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  sosButtonText: {
+    color: 'white',
+    marginLeft: 4,
+    fontWeight: '700',
+  },
+  driverActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
   },
   rideActions: {
     gap: 12,
   },
   statusButton: {
-    backgroundColor: '#8b5cf6',
     borderRadius: 12,
+    overflow: 'hidden',
+  },
+  statusButtonGradient: {
     padding: 16,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   statusButtonText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   waitingContainer: {
-    alignItems: 'center',
     marginTop: 40,
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  waitingGradient: {
+    padding: 32,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#374151',
+    borderRadius: 18,
+  },
+  waitingPulse: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(236, 72, 153, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   waitingText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#6b7280',
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#ffffff',
     marginBottom: 8,
   },
   waitingSubtext: {
     fontSize: 14,
     color: '#9ca3af',
+    fontWeight: '500',
   },
-  // Map-specific styles
-  map: {
-    flex: 1,
+  navigationCard: {
+    position: 'absolute',
+    top: 80,
+    left: 20,
+    right: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    pointerEvents: 'box-none',
+  navigationCardGradient: {
+    padding: 20,
+  },
+  navigationTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 8,
+  },
+  navigationAddress: {
+    fontSize: 16,
+    color: '#d1d5db',
+    marginBottom: 16,
+  },
+  navigationActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  rideActionsMap: {
+    position: 'absolute',
+    bottom: 40,
+    left: 20,
+    right: 20,
+    gap: 12,
   },
 });

@@ -26,68 +26,95 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ActiveRideScreen() {
   const router = useRouter();
-  const [timeRemaining, setTimeRemaining] = useState(5 * 60); // 5 minutes
+  const [timeRemaining, setTimeRemaining] = useState(5 * 60);
   const [rideStatus, setRideStatus] = useState<'searching' | 'driver_assigned' | 'arriving' | 'picked_up'>('driver_assigned');
   const [driver, setDriver] = useState<any | null>(null);
   const [ride, setRide] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [timerStartTime, setTimerStartTime] = useState<Date | null>(null);
   const placeholderPhoto = 'https://via.placeholder.com/150';
 
+  const fetchLiveRide = async () => {
+    try {
+      const authToken = await AsyncStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/rides/live`, {
+        headers: {
+          'Accept': 'application/json',
+          'content-type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
+      const data = await response.json();
+      console.log('API Response:', data);
+      const liveRide = data.data;
+      setRide(liveRide);
+      setDriver(liveRide.driver?.user || null);
 
-  useEffect(() => {
-    const fetchLiveRide = async () => {
-      try {
-        const authToken = await AsyncStorage.getItem('token');
-        const response = await fetch(`${API_BASE_URL}/rides/live`, {
-              headers: {
-                'Accept': 'application/json',
-                'content-type': 'application/json',
-                'Authorization': `Bearer ${authToken}`,
-              },
-            });
-
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          throw new Error('Response is not JSON. Maybe unauthorized or wrong URL.');
-        }
-
-        const data = await response.json();
-        // The API wraps ride in `data`
-        const liveRide = data.data;
-
-        setRide(liveRide);
-        setDriver(liveRide.driver?.user || null);
-
-        // Map backend status to your frontend statuses
-        switch (liveRide.status) {
-          case 'pending':
-          case 'accepted':
-            setRideStatus('driver_assigned');
-            break;
-          case 'in_progress':
-          case 'arrived':
-            setRideStatus('arriving');
-            break;
-          default:
-            setRideStatus('driver_assigned');
-        }
-      } catch (error) {
-        console.error('Failed to fetch live ride:', error);
-        Alert.alert('Error', 'Could not load live ride. Please try again later.');
-      } finally {
-        setLoading(false);
+      // Update ride status
+      switch (liveRide.status) {
+        case 'pending':
+        case 'accepted':
+          setRideStatus('driver_assigned');
+          break;
+        case 'in_progress':
+          setRideStatus('picked_up');
+          break;
+        case 'arrived':
+          setRideStatus('arriving');
+          break;
+        default:
+          setRideStatus('driver_assigned');
       }
-    };
 
-    fetchLiveRide();
-  }, []);
+      // Reset timer if status changed or ride is newly created
+      const createdAt = new Date(liveRide.timestamps.created_at);
+      if (!timerStartTime || liveRide.status !== ride?.status) {
+        setTimerStartTime(createdAt);
+        setElapsedTime(Math.floor((new Date().getTime() - createdAt.getTime()) / 1000));
+      }
+    } catch (error) {
+      console.error('Failed to fetch live ride:', error);
+      Alert.alert('Error', 'Could not load live ride. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  // Timer effect
+  useEffect(() => {
+    if (!timerStartTime) return;
+
+    const timerInterval = setInterval(() => {
+      const now = new Date();
+      const newElapsedTime = Math.floor((now.getTime() - timerStartTime.getTime()) / 1000);
+      setElapsedTime(newElapsedTime);
+    }, 1000);
+
+    return () => clearInterval(timerInterval);
+  }, [timerStartTime]);
+
+  // Poll for ride updates
+// Replace your current polling useEffect with this:
+    useEffect(() => {
+      fetchLiveRide(); // Initial fetch
+
+      const interval = setInterval(() => {
+        // Only poll if ride status is 'pending' or 'driver_assigned'
+        if (ride?.status === 'pending' || ride?.status === 'driver_assigned') {
+          fetchLiveRide();
+        }
+      }, 10000); // Poll every 10 seconds
+
+      return () => clearInterval(interval);
+    }, [ride?.status]); // Add ride.status as dependency
+
+
+  // Countdown timer (existing)
   useEffect(() => {
     const timer = setInterval(() => {
       setTimeRemaining(prev => (prev <= 0 ? 0 : prev - 1));
     }, 1000);
-
     return () => clearInterval(timer);
   }, []);
 
@@ -98,7 +125,7 @@ export default function ActiveRideScreen() {
   };
 
   const handleCall = () => {
-    Linking.openURL('tel:+96170123456'); // Replace with driver phone if available
+    Linking.openURL('tel:+96170123456');
   };
 
   const handleMessage = () => {
@@ -149,6 +176,12 @@ export default function ActiveRideScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Ride Timer */}
+      <View style={styles.timerContainer}>
+        <Text style={styles.timerLabel}>Ride Duration</Text>
+        <Text style={styles.timerText}>{formatTime(elapsedTime)}</Text>
+      </View>
+
       {/* Status Banner */}
       <View style={[styles.statusBanner, { backgroundColor: statusInfo.color }]}>
         <Text style={styles.statusTitle}>{statusInfo.title}</Text>
@@ -160,7 +193,12 @@ export default function ActiveRideScreen() {
         <Clock size={32} color="#007AFF" />
         <View style={styles.etaInfo}>
           <Text style={styles.etaLabel}>Driver arriving in</Text>
-          <Text style={styles.etaTime}>{ride?.driver?.eta ?? 5} min</Text>
+          <Text style={styles.etaTime}>
+            {ride?.driver?.eta?.duration_text || 'N/A'}
+          </Text>
+          <Text style={styles.etaDistance}>
+            {ride?.driver?.eta?.distance ? `${(ride.driver.eta.distance / 1000).toFixed(1)} km` : 'Distance not available'}
+          </Text>
         </View>
       </View>
 
@@ -197,29 +235,47 @@ export default function ActiveRideScreen() {
       {/* Trip Details */}
       <View style={styles.tripDetails}>
         <Text style={styles.sectionTitle}>Trip Details</Text>
+        {/* Pickup */}
         <View style={styles.locationRow}>
           <View style={[styles.locationDot, { backgroundColor: '#FF5252' }]} />
           <View style={styles.locationInfo}>
             <Text style={styles.locationLabel}>PICKUP</Text>
-            <Text style={styles.locationText}>
+            <Text style={styles.locationAddress}>
+              {ride?.origin?.address || 'Pickup address not available'}
+            </Text>
+            <Text style={styles.locationCoordinates}>
               {ride?.origin?.lat && ride?.origin?.lng
                 ? `Lat: ${ride.origin.lat}, Lng: ${ride.origin.lng}`
-                : 'Hamra Street, Beirut'}
+                : 'No coordinates'}
             </Text>
           </View>
         </View>
         <View style={styles.locationLine} />
+        {/* Destination */}
         <View style={styles.locationRow}>
           <View style={[styles.locationDot, { backgroundColor: '#9C27B0' }]} />
           <View style={styles.locationInfo}>
             <Text style={styles.locationLabel}>DESTINATION</Text>
-            <Text style={styles.locationText}>
+            <Text style={styles.locationAddress}>
+              {ride?.destination?.address || 'Destination not available'}
+            </Text>
+            <Text style={styles.locationCoordinates}>
               {ride?.destination?.lat && ride?.destination?.lng
                 ? `Lat: ${ride.destination.lat}, Lng: ${ride.destination.lng}`
-                : 'Beirut Airport'}
+                : 'No coordinates'}
             </Text>
           </View>
         </View>
+        {/* Trip Time and Distance */}
+        {ride?.trip?.time && (
+          <View style={styles.tripTimeContainer}>
+            <Clock size={16} color="#666" />
+            <Text style={styles.tripTimeLabel}>Estimated Trip Time:</Text>
+            <Text style={styles.tripTimeText}>
+              {ride.trip.time.duration_text} ({ride.trip.time.distance ? `${(ride.trip.time.distance / 1000).toFixed(1)} km` : 'N/A'})
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Bottom Section */}
@@ -252,6 +308,7 @@ const styles = StyleSheet.create({
   etaInfo: { marginLeft: 16 },
   etaLabel: { fontSize: 14, color: '#666', marginBottom: 4 },
   etaTime: { fontSize: 28, fontWeight: 'bold', color: '#007AFF' },
+  etaDistance: { fontSize: 14, fontWeight: 'bold', color: '#007AFF' },
   driverCard: { flexDirection: 'row', backgroundColor: 'white', marginHorizontal: 16, marginBottom: 16, padding: 16, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 5 },
   driverPhoto: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#E0E0E0' },
   driverInfo: { flex: 1, marginLeft: 12 },
@@ -267,6 +324,48 @@ const styles = StyleSheet.create({
   locationDot: { width: 12, height: 12, borderRadius: 6, marginTop: 4, marginRight: 12 },
   locationInfo: { flex: 1 },
   locationLabel: { fontSize: 11, color: '#666', marginBottom: 4, letterSpacing: 0.5 },
+   timerContainer: {
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  timerLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  timerText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  locationAddress: {
+  fontSize: 16,
+  color: '#333',
+  fontWeight: '500',
+  marginBottom: 2,
+},
+locationCoordinates: {
+  fontSize: 10,
+  color: '#666',
+  fontWeight: '400',
+},
+tripTimeContainer: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  marginTop: 12,
+},
+tripTimeLabel: {
+  fontSize: 14,
+  color: '#666',
+  marginLeft: 8,
+},
+tripTimeText: {
+  fontSize: 14,
+  color: '#333',
+  fontWeight: '600',
+  marginLeft: 4,
+},
+
+
   locationText: { fontSize: 16, color: '#333', fontWeight: '500' },
   locationLine: { width: 2, height: 24, backgroundColor: '#E0E0E0', marginLeft: 5, marginVertical: 8 },
   bottomSection: { flex: 1, justifyContent: 'flex-end', padding: 16 },
