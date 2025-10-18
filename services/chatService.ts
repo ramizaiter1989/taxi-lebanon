@@ -14,7 +14,7 @@ const getAuthHeaders = async () => {
 };
 
 export const chatService = {
-  async getMessages() { // Removed rideId parameter since it's hardcoded
+  async getMessages() {
     try {
       const { headers } = await getAuthHeaders();
       const rideId = 4; // Hardcoded rideId for testing
@@ -26,7 +26,7 @@ export const chatService = {
     }
   },
 
-  async sendMessage(message: string) { // Removed rideId parameter since it's hardcoded
+  async sendMessage(message: string) {
     try {
       const { headers } = await getAuthHeaders();
       const rideId = 4; // Hardcoded rideId for testing
@@ -45,6 +45,30 @@ export const chatService = {
         message: error.message,
       });
       throw error;
+    }
+  },
+
+  async markAsRead(rideId: number = 4) {
+    try {
+      const { headers } = await getAuthHeaders();
+      const response = await axios.post(`${API_BASE_URL}/chat/${rideId}/mark-read`, {}, { headers });
+      console.log('Messages marked as read');
+      return response.data;
+    } catch (error: any) {
+      console.error('Mark as read error:', error.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  async getRideDetails(rideId: number = 4) {
+    try {
+      const { headers } = await getAuthHeaders();
+      const response = await axios.get(`${API_BASE_URL}/rides/${rideId}`, { headers });
+      return response.data;
+    } catch (error: any) {
+      console.error('Get ride details error:', error.response?.data || error.message);
+      // Don't throw - just return null if ride not found
+      return null;
     }
   },
 };

@@ -1,6 +1,6 @@
 // app/chat.tsx
 import React, { useEffect, useState, useRef } from 'react';
-import { View, FlatList, Text, TextInput, TouchableOpacity, Alert, StyleSheet, StatusBar, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, FlatList, Text, TextInput, TouchableOpacity, Alert, StyleSheet, StatusBar, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createEcho } from '../services/echo';
 import { chatService } from '../services/chatService';
@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 type User = {
   id: number;
   name: string;
+  role?: string;
 };
 
 type Chat = {
@@ -19,6 +20,7 @@ type Chat = {
   sender_id: number;
   receiver_id: number;
   message: string;
+  is_read: boolean;
   created_at: string;
   updated_at: string;
   sender: User;
@@ -39,7 +41,11 @@ export default function ChatScreen({ route }: ChatScreenProps) {
   const [messages, setMessages] = useState<Chat[]>([]);
   const [text, setText] = useState('');
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+  const [otherParticipant, setOtherParticipant] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+  const [isOnline, setIsOnline] = useState(false);
   const flatListRef = useRef<FlatList<Chat>>(null);
   const echoRef = useRef<any>(null);
 
@@ -54,25 +60,66 @@ export default function ChatScreen({ route }: ChatScreenProps) {
         }
 
         const userIdStr = await AsyncStorage.getItem('user_id');
+        const role = await AsyncStorage.getItem('user_role');
         const userId = userIdStr ? Number(userIdStr) : null;
         setCurrentUserId(userId);
-        console.log('👤 Current user ID:', userId);
+        setCurrentUserRole(role);
+        console.log('👤 Current user ID:', userId, 'Role:', role);
 
+        // Load messages
         console.log('🔄 Loading messages for ride:', rideId);
         const msgs = await chatService.getMessages();
         
-        // Handle both array and {data: array} formats
         let msgsArray: Chat[] = [];
         if (Array.isArray(msgs)) {
           msgsArray = msgs;
         } else if (msgs?.data && Array.isArray(msgs.data)) {
-          // If it's a collection resource, extract the data
           msgsArray = msgs.data.map((item: any) => item.data || item);
         }
         
         const validMessages = msgsArray.filter((msg: Chat) => msg && msg.id);
         console.log('📨 Loaded messages:', validMessages.length);
         setMessages(validMessages);
+
+        // Determine the other participant (who we're chatting with)
+        if (validMessages.length > 0) {
+          const firstMsg = validMessages[0];
+          // If I'm the sender, the other person is the receiver, and vice versa
+          const other = firstMsg.sender_id === userId ? firstMsg.receiver : firstMsg.sender;
+          setOtherParticipant(other);
+          console.log('👥 Chatting with:', other.name, `(${other.role || 'unknown'})`);
+        } else {
+          // No messages yet, try to get from ride details
+          try {
+            const rideDetails = await chatService.getRideDetails(rideId);
+            if (rideDetails?.data) {
+              const ride = rideDetails.data;
+              if (role === 'driver' && ride.passenger) {
+                setOtherParticipant({
+                  id: ride.passenger.id,
+                  name: ride.passenger.name,
+                  role: 'passenger'
+                });
+              } else if (role === 'passenger' && ride.driver) {
+                setOtherParticipant({
+                  id: ride.driver.user_id,
+                  name: ride.driver.name || 'Driver',
+                  role: 'driver'
+                });
+              }
+            }
+          } catch (err) {
+            console.log('Could not load ride details:', err);
+          }
+        }
+
+        // Mark messages as read when opening chat
+        try {
+          await chatService.markAsRead(rideId);
+          console.log('✅ Messages marked as read');
+        } catch (err) {
+          console.log('Could not mark messages as read:', err);
+        }
 
         // Initialize Echo
         console.log('🔌 Initializing Echo...');
@@ -95,24 +142,18 @@ export default function ChatScreen({ route }: ChatScreenProps) {
           .listen('.NewMessageEvent', (e: any) => {
             console.log('🔔 RAW EVENT RECEIVED:', JSON.stringify(e, null, 2));
             
-            // Handle different possible data structures
             let newMessage: Chat | null = null;
             
-            // Try different paths where the message might be
             if (e.chat?.data) {
-              // ChatResource format: { chat: { data: {...} } }
               newMessage = e.chat.data;
               console.log('✅ Found message in e.chat.data');
             } else if (e.chat?.id) {
-              // Direct format: { chat: {...} }
               newMessage = e.chat;
               console.log('✅ Found message in e.chat');
             } else if (e.data) {
-              // Alternative format: { data: {...} }
               newMessage = e.data;
               console.log('✅ Found message in e.data');
             } else if (e.id) {
-              // Direct message: {...}
               newMessage = e;
               console.log('✅ Found message in root');
             }
@@ -124,7 +165,21 @@ export default function ChatScreen({ route }: ChatScreenProps) {
                 message: newMessage.message?.substring(0, 20) + '...'
               });
               
-              // Prevent duplicate messages
+              // Set other participant if not set yet
+              if (!otherParticipant && newMessage.sender_id !== userId) {
+                setOtherParticipant(newMessage.sender);
+                console.log('👥 Set chat participant from new message:', newMessage.sender.name);
+              }
+
+              // Auto mark as read if message is from other person
+              if (newMessage.sender_id !== userId) {
+                setTimeout(() => {
+                  chatService.markAsRead(rideId).catch(err => 
+                    console.log('Auto mark read failed:', err)
+                  );
+                }, 1000);
+              }
+              
               setMessages(prev => {
                 const exists = prev.some(msg => msg.id === newMessage!.id);
                 if (exists) {
@@ -143,13 +198,19 @@ export default function ChatScreen({ route }: ChatScreenProps) {
             Alert.alert('Connection Error', 'Could not connect to chat. Please try again.');
           });
 
-        // Listen for successful subscription
         echo.connector.pusher.connection.bind('connected', () => {
           console.log('✅ Pusher connected');
+          setIsOnline(true);
+        });
+
+        echo.connector.pusher.connection.bind('disconnected', () => {
+          console.log('⚠️ Pusher disconnected');
+          setIsOnline(false);
         });
 
         echo.connector.pusher.connection.bind('error', (err: any) => {
           console.error('❌ Pusher connection error:', err);
+          setIsOnline(false);
         });
 
         setIsLoading(false);
@@ -194,24 +255,22 @@ export default function ChatScreen({ route }: ChatScreenProps) {
   }, [messages]);
 
   const sendMessage = async () => {
-    if (!text.trim()) return;
+    if (!text.trim() || isSending) return;
 
     const tempMessage = text;
-    setText(''); // Clear input immediately
+    setText('');
+    setIsSending(true);
 
     try {
       console.log('📤 Sending message:', tempMessage.substring(0, 50));
       const response = await chatService.sendMessage(tempMessage);
       console.log('✅ Server response:', JSON.stringify(response, null, 2));
       
-      // Extract the message from response
       let newMsg: Chat | null = null;
       
       if (response?.data?.data) {
-        // Resource format: { data: { data: {...} } }
         newMsg = response.data.data;
       } else if (response?.data) {
-        // Simple format: { data: {...} }
         newMsg = response.data;
       }
       
@@ -228,7 +287,7 @@ export default function ChatScreen({ route }: ChatScreenProps) {
       
     } catch (error: any) {
       console.error('❌ Send message error:', error);
-      setText(tempMessage); // Restore text on error
+      setText(tempMessage);
       
       if (error.response?.status === 401) {
         Alert.alert('Session Expired', 'Please login again');
@@ -240,6 +299,8 @@ export default function ChatScreen({ route }: ChatScreenProps) {
       } else {
         Alert.alert('Error', 'Failed to send message. Please try again.');
       }
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -264,9 +325,19 @@ export default function ChatScreen({ route }: ChatScreenProps) {
           <Text style={[styles.messageText, isMyMessage ? styles.myMessageText : styles.theirMessageText]}>
             {item.message}
           </Text>
-          <Text style={[styles.timestamp, isMyMessage ? styles.myTimestamp : styles.theirTimestamp]}>
-            {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Text>
+          <View style={styles.messageFooter}>
+            <Text style={[styles.timestamp, isMyMessage ? styles.myTimestamp : styles.theirTimestamp]}>
+              {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </Text>
+            {isMyMessage && (
+              <Ionicons 
+                name={item.is_read ? "checkmark-done" : "checkmark"} 
+                size={14} 
+                color={item.is_read ? "#4FC3F7" : "rgba(255, 255, 255, 0.7)"} 
+                style={styles.readIcon}
+              />
+            )}
+          </View>
         </View>
 
         {isMyMessage && <View style={styles.avatarSpacer} />}
@@ -278,9 +349,7 @@ export default function ChatScreen({ route }: ChatScreenProps) {
     return (
       <View style={styles.loadingContainer}>
         <View style={styles.loadingContent}>
-          <View style={styles.spinner}>
-            <Ionicons name="chatbubbles" size={50} color="#D81B60" />
-          </View>
+          <ActivityIndicator size="large" color="#D81B60" />
           <Text style={styles.loadingText}>Loading messages...</Text>
         </View>
       </View>
@@ -309,11 +378,20 @@ export default function ChatScreen({ route }: ChatScreenProps) {
         </TouchableOpacity>
         <View style={styles.headerContent}>
           <View style={styles.headerAvatar}>
-            <Ionicons name="person" size={20} color="#FFF" />
+            <Text style={styles.headerAvatarText}>
+              {otherParticipant?.name?.charAt(0).toUpperCase() || '?'}
+            </Text>
           </View>
           <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Driver Chat</Text>
-            <Text style={styles.headerSubtitle}>Ride #{rideId}</Text>
+            <Text style={styles.headerTitle}>
+              {otherParticipant?.name || 'Loading...'}
+            </Text>
+            <View style={styles.headerSubtitleRow}>
+              <View style={[styles.statusDot, { backgroundColor: isOnline ? '#4CAF50' : '#999' }]} />
+              <Text style={styles.headerSubtitle}>
+                {isOnline ? 'Online' : 'Offline'} • Ride #{rideId}
+              </Text>
+            </View>
           </View>
         </View>
         <TouchableOpacity style={styles.moreButton}>
@@ -336,7 +414,9 @@ export default function ChatScreen({ route }: ChatScreenProps) {
                 <Ionicons name="chatbubbles-outline" size={70} color="#D81B60" opacity={0.2} />
               </View>
               <Text style={styles.emptyText}>No messages yet</Text>
-              <Text style={styles.emptySubtext}>Start chatting with your driver</Text>
+              <Text style={styles.emptySubtext}>
+                Start chatting with {otherParticipant?.name || 'your contact'}
+              </Text>
             </View>
           }
         />
@@ -352,19 +432,24 @@ export default function ChatScreen({ route }: ChatScreenProps) {
             placeholderTextColor="#999"
             multiline
             maxLength={1000}
+            editable={!isSending}
           />
           <TouchableOpacity
             onPress={sendMessage}
             style={styles.sendButton}
-            disabled={!text.trim()}
+            disabled={!text.trim() || isSending}
           >
             <LinearGradient
-              colors={text.trim() ? ['#C2185B', '#D81B60'] : ['#CCC', '#CCC']}
+              colors={text.trim() && !isSending ? ['#C2185B', '#D81B60'] : ['#CCC', '#CCC']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.sendButtonGradient}
             >
-              <Ionicons name="send" size={22} color="#FFF" />
+              {isSending ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Ionicons name="send" size={22} color="#FFF" />
+              )}
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -387,13 +472,11 @@ const styles = StyleSheet.create({
   loadingContent: {
     alignItems: 'center',
   },
-  spinner: {
-    marginBottom: 20,
-  },
   loadingText: {
     fontSize: 16,
     color: '#D81B60',
     fontWeight: '600',
+    marginTop: 12,
   },
   header: {
     paddingTop: Platform.OS === 'ios' ? 50 : 30,
@@ -425,6 +508,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 12,
   },
+  headerAvatarText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFF',
+  },
   headerTextContainer: {
     flex: 1,
   },
@@ -433,10 +521,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFF',
   },
+  headerSubtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
   headerSubtitle: {
     fontSize: 12,
     color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 2,
   },
   moreButton: {
     padding: 4,
@@ -514,16 +612,23 @@ const styles = StyleSheet.create({
   theirMessageText: {
     color: '#000000',
   },
+  messageFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    justifyContent: 'flex-end',
+  },
   timestamp: {
     fontSize: 10,
-    marginTop: 4,
-    alignSelf: 'flex-end',
   },
   myTimestamp: {
     color: 'rgba(255, 255, 255, 0.7)',
   },
   theirTimestamp: {
     color: '#999',
+  },
+  readIcon: {
+    marginLeft: 4,
   },
   emptyContainer: {
     flex: 1,
