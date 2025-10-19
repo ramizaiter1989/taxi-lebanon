@@ -301,16 +301,22 @@ export default function EnhancedBookingModal({ visible, onClose, onConfirm }: En
 
 const styles = StyleSheet.create({
   modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContainer: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '90%',
-  },
+  flex: 1,
+  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  justifyContent: 'center', // Center vertically
+  alignItems: 'center',     // Center horizontally
+},
+modalContainer: {
+  flex: 1,                  // Fill entire screen
+  width: '100%',             // Full width
+  backgroundColor: 'white',
+  borderRadius: 0,          // Remove rounded corners if you want full screen
+},
+scrollContent: {
+  flex: 1,
+  paddingBottom: 20,        // Safe spacing at bottom
+},
+
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -328,9 +334,7 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 4,
   },
-  scrollContent: {
-    flex: 1,
-  },
+ 
   section: {
     padding: 20,
     borderBottomWidth: 1,
