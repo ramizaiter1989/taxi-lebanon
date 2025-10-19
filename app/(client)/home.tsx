@@ -28,6 +28,7 @@ import { useMap } from '@/providers/MapProvider';
 import { useUser } from '@/hooks/user-store';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { createEcho } from '@/services/echo';
 
 
 
@@ -130,6 +131,38 @@ const rideId = 4;
       }
     }
   }, [currentRoute, routeStart, routeEnd]);
+
+
+
+useEffect(() => {
+  let echoInstance: any;
+
+  (async () => {
+    echoInstance = await createEcho();
+    if (!echoInstance) return;
+
+    // Subscribe to the public drivers channel
+    const channel = echoInstance.channel('drivers'); // public channel
+
+    channel.listen('RideRequested', (data: any) => {
+      console.log('New ride requested:', data);
+      Alert.alert(
+        'New Ride Request',
+        `Pickup: (${data.origin_lat}, ${data.origin_lng})\nDestination: (${data.destination_lat}, ${data.destination_lng})`
+      );
+
+      // Optional: update state to show ride on map
+      // setNewRide(data)
+    });
+  })();
+
+  return () => {
+    if (echoInstance) {
+      echoInstance.disconnect();
+    }
+  };
+}, []);
+
 
   // Auto-calculate route when both points are set
   useEffect(() => {
