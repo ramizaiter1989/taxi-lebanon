@@ -1,27 +1,29 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Home, Clock, Settings, Car } from 'lucide-react-native';
-
+import { Platform } from 'react-native';
 export default function ClientTabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#007AFF',
-        tabBarInactiveTintColor: '#9ca3af',
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: 'white',
-          borderTopWidth: 1,
-          borderTopColor: '#f3f4f6',
-          paddingBottom: 8,
-          paddingTop: 8,
-          height: 88,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 8,
-          elevation: 10,
-        },
+              tabBarActiveTintColor: '#ec4899',
+              tabBarInactiveTintColor: '#d1d5db',
+              headerShown: false,
+              tabBarStyle: {
+                backgroundColor: 'white',
+                borderTopWidth: 0,
+                paddingBottom: Platform.OS === 'ios' ? 20 : 8,
+                paddingTop: 12,
+                height: Platform.OS === 'ios' ? 88 : 68,
+                elevation: 8,
+                shadowColor: '#ec4899',
+                shadowOffset: {
+                  width: 0,
+                  height: -3,
+                },
+                shadowOpacity: 0.08,
+                shadowRadius: 8,
+              },
         tabBarLabelStyle: {
           fontSize: 12,
           fontWeight: '600',

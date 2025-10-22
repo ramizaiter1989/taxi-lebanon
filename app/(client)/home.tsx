@@ -11,6 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
+
 import { 
   Search, 
   Navigation, 
@@ -258,23 +259,17 @@ useEffect(() => {
               <Text style={styles.searchPlaceholder}>
                 {isBookingMode 
                   ? (!routeStart ? 'Search pickup location...' : 'Search destination...')
-                  : 'Search places...'}
+                  : 'Search Lebanon places...'}
               </Text>
             </LinearGradient>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
-            <LinearGradient colors={['#007AFF', '#0051D5']} style={styles.profileGradient}>
+            <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
+            <LinearGradient colors={['#ffb6d9b2', '#ff85c0ae']} style={styles.profileGradient}>
               <User size={20} color="white" />
             </LinearGradient>
           </TouchableOpacity>
         </View>
-<TouchableOpacity
-  style={{ backgroundColor: '#007AFF', padding: 12, borderRadius: 8 }}
-  onPress={() => router.push('./TestChat')}
->
-  <Text style={{ color: 'white' }}>Open Chat</Text>
-</TouchableOpacity>
         <View style={styles.controlsRight}>
           <TouchableOpacity style={styles.controlButton} onPress={zoomIn}>
             <Plus size={24} color="#333" />
@@ -324,7 +319,7 @@ useEffect(() => {
           <View style={styles.routeControls}>
             <View style={styles.routeInfo}>
               <View style={styles.routeStep}>
-                <View style={[styles.routeStepIcon, { backgroundColor: routeStart ? '#FF5252' : '#E0E0E0' }]}>
+                <View style={[styles.routeStepIcon, { backgroundColor: routeStart ? '#FF5252' : '#f054debc' }]}>
                   <MapPin size={16} color="white" />
                 </View>
                 <Text style={styles.routeStepText}>
@@ -357,7 +352,7 @@ useEffect(() => {
               style={styles.bookRideButton}
               onPress={handleStartBooking}
             >
-              <LinearGradient colors={['#007AFF', '#0051D5']} style={styles.bookRideGradient}>
+              <LinearGradient colors={['#FFB6D9', '#f964ac7c']} style={styles.bookRideGradient}>
                 <Text style={styles.bookRideText}>Where to?</Text>
               </LinearGradient>
             </TouchableOpacity>
@@ -403,7 +398,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     position: 'relative',
-    backgroundColor: '#fff',
+    backgroundColor: '#e478f5ff',
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
@@ -416,7 +411,7 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(231, 106, 194, 0.9)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 999,
@@ -438,16 +433,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowOpacity: 1,
+    shadowRadius: 15,
     elevation: 5,
   },
   profileButton: {
     borderRadius: 12,
-    shadowColor: '#007AFF',
+    shadowColor: '#0e0e0eff',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOpacity: 1,
+    shadowRadius: 15,
     elevation: 5,
   },
   profileGradient: {
@@ -462,24 +457,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 22,
   },
   searchPlaceholder: {
     marginLeft: 12,
     fontSize: 16,
-    color: '#999',
+    color: '#999999ff',
     flex: 1,
   },
   controlsRight: {
     position: 'absolute',
     right: 16,
     top: '40%',
-    backgroundColor: 'white',
+    backgroundColor: '#edededff',
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowColor: '#000000ff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 22,
     elevation: 5,
   },
   controlButton: {
@@ -496,9 +491,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 76,
     top: '42%',
-    backgroundColor: 'white',
+    backgroundColor: '#d733bfa7',
     borderRadius: 12,
-    shadowColor: '#000',
+    shadowColor: '#00000036',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
@@ -527,12 +522,12 @@ const styles = StyleSheet.create({
     top: 130,
     left: 16,
     right: 16,
-    backgroundColor: 'white',
+    backgroundColor: '#ffffffa7',
     borderRadius: 16,
     padding: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
     shadowRadius: 12,
     elevation: 8,
   },
@@ -561,7 +556,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 1,
     gap: 8,
   },
   cancelButtonText: {
@@ -577,9 +572,9 @@ const styles = StyleSheet.create({
   },
   bookRideButton: {
     borderRadius: 16,
-    shadowColor: '#007AFF',
+    shadowColor: '#070707ff',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 1,
     shadowRadius: 12,
     elevation: 8,
   },

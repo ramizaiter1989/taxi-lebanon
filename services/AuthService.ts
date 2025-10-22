@@ -48,13 +48,13 @@ export const register = async (formData: any) => {
 
 // Verify OTP
 export const verifyOtp = async (payload: OtpPayload): Promise<AuthResponse> => {
-  const response = await axios.post(`${API_BASE_URL}/verify-otp`, payload);
+  const response = await axios.post(`${API_BASE_URL}/otp/verify`, payload);
   return response.data as AuthResponse;
 };
 
 // Resend OTP
 export const resendOtp = async (phone: string): Promise<AuthResponse> => {
-  const response = await axios.post(`${API_BASE_URL}/resend-otp`, { phone });
+  const response = await axios.post(`${API_BASE_URL}/otp/resend`, { phone });
   return response.data;
 };
 

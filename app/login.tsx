@@ -1,4 +1,3 @@
-// app/(auth)/login.tsx
 import React, { useState } from 'react';
 import { API_BASE_URL } from "../constants/config";
 import {
@@ -37,6 +36,7 @@ interface LoginResponse {
     email: string;
     role: 'driver' | 'passenger' | 'admin' | string;
   };
+  profile_completed?: boolean;
 }
 
 export default function LoginScreen() {
@@ -48,77 +48,59 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
-  // Animation values
   const emailScale = useSharedValue(1);
   const passwordScale = useSharedValue(1);
   const buttonScale = useSharedValue(1);
 
   const handleLogin = async () => {
-    console.log('[Login] Starting login process...');
-    
     if (!email || !password) {
-      console.log('[Login] Validation failed: missing email or password');
       Alert.alert('Error', 'Please enter both email and password.');
       return;
     }
-
     setIsLoading(true);
-
     try {
-      console.log('[Login] Sending request to API:', API_URL);
-      const response = await axios.post<LoginResponse>(API_URL, { 
-        email, 
-        password 
-      });
-      console.log('[Login] API response received:', response.data);
+      const response = await axios.post<LoginResponse>(API_URL, { email, password });
+      const { token, user, profile_completed } = response.data;
 
-      const { token, user } = response.data;
-
-      // Save token
       await AsyncStorage.setItem('token', token);
-      console.log('[Login] Token saved to AsyncStorage');
-
-      // Save credentials if remember me is checked
       if (rememberMe) {
         await AsyncStorage.setItem('savedEmail', email);
-        console.log('[Login] Email saved for Remember Me');
       }
 
       Alert.alert('Success', `Welcome back, ${user.name}! 🎉`);
 
-      // Navigate based on role
       if (user.role === 'passenger') {
         router.replace('/(client)/home');
       } else if (user.role === 'driver') {
-        router.replace('/(rider)/home');
+        if (profile_completed === false) {
+          router.replace('/complete-driver-profile');
+        } else {
+          router.replace('/(rider)/home');
+        }
       } else if (user.role === 'admin') {
         router.replace('/(admin)/home');
       } else {
-        console.log('[Login] Unknown user role:', user.role);
         Alert.alert('Error', 'Unknown user role.');
       }
     } catch (error) {
-      console.log('[Login] Login failed with error:', error);
       let errorMessage = 'Login failed. Please check your credentials.';
-      
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 401) {
           errorMessage = 'Invalid email or password.';
+        } else if (error.response?.status === 403) {
+          errorMessage = error.response.data.message || 'Access denied.';
         } else if (error.response?.status === 500) {
           errorMessage = 'Server error. Please try again later.';
         } else {
           errorMessage = error.response?.data?.message || error.message;
         }
       }
-      
       Alert.alert('Login Failed', errorMessage);
     } finally {
-      console.log('[Login] Login process finished');
       setIsLoading(false);
     }
   };
 
-  // Animated styles
   const emailAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: withSpring(emailScale.value) }],
   }));
@@ -140,51 +122,47 @@ export default function LoginScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Animated Background Blobs */}
+        {/* Background and UI elements remain the same */}
         <View style={styles.backgroundContainer}>
           <LinearGradient
-            colors={['#a855f7', '#ec4899']}
+            colors={['#fce7f3', '#ec4899']}
             style={[styles.blob, styles.blob1]}
           />
           <LinearGradient
-            colors={['#ec4899', '#3b82f6']}
+            colors={['#ec4899', '#f472b6']}
             style={[styles.blob, styles.blob2]}
           />
           <LinearGradient
-            colors={['#3b82f6', '#8b5cf6']}
+            colors={['#f472b6', '#c026d3']}
             style={[styles.blob, styles.blob3]}
           />
         </View>
 
-        {/* Floating Decorative Elements */}
         <View style={[styles.floatingElement, styles.floatingTop]}>
           <LinearGradient
-            colors={['#ec4899', '#8b5cf6']}
+            colors={['#ec4899', '#c026d3']}
             style={styles.floatingGradient}
           />
         </View>
 
-        {/* Main Card with Glassmorphism */}
         <BlurView intensity={80} tint="light" style={styles.card}>
-          {/* Decorative corner elements */}
           <View style={[styles.cornerDecor, styles.cornerTopRight]}>
             <LinearGradient
-              colors={['#ec4899', '#8b5cf6']}
+              colors={['#ec4899', '#c026d3']}
               style={styles.cornerGradient}
             />
           </View>
           <View style={[styles.cornerDecor, styles.cornerBottomLeft]}>
             <LinearGradient
-              colors={['#3b82f6', '#8b5cf6']}
+              colors={['#f472b6', '#c026d3']}
               style={styles.cornerGradient}
             />
           </View>
 
-          {/* Logo Section */}
           <View style={styles.logoContainer}>
             <View style={styles.logoWrapper}>
               <LinearGradient
-                colors={['#ec4899', '#8b5cf6', '#3b82f6']}
+                colors={['#ec4899', '#c026d3', '#f472b6']}
                 style={styles.logoGradient}
               >
                 <Ionicons name="car" size={48} color="#fff" />
@@ -195,7 +173,6 @@ export default function LoginScreen() {
             <Text style={styles.subtitle}>Your trusted women's taxi service</Text>
           </View>
 
-          {/* Email Input */}
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Email Address</Text>
             <Animated.View style={[emailAnimatedStyle]}>
@@ -209,13 +186,13 @@ export default function LoginScreen() {
                   <Ionicons
                     name="mail"
                     size={20}
-                    color="#9ca3af"
+                    color="#ec4899"
                     style={styles.inputIcon}
                   />
                   <TextInput
                     style={styles.input}
                     placeholder="your@email.com"
-                    placeholderTextColor="#9ca3af"
+                    placeholderTextColor="#ec4899"
                     value={email}
                     onChangeText={setEmail}
                     keyboardType="email-address"
@@ -235,7 +212,6 @@ export default function LoginScreen() {
             </Animated.View>
           </View>
 
-          {/* Password Input */}
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Password</Text>
             <Animated.View style={[passwordAnimatedStyle]}>
@@ -249,13 +225,13 @@ export default function LoginScreen() {
                   <Ionicons
                     name="lock-closed"
                     size={20}
-                    color="#9ca3af"
+                    color="#ec4899"
                     style={styles.inputIcon}
                   />
                   <TextInput
                     style={[styles.input, styles.passwordInput]}
                     placeholder="Enter your password"
-                    placeholderTextColor="#9ca3af"
+                    placeholderTextColor="#ec4899"
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry={!showPassword}
@@ -275,7 +251,7 @@ export default function LoginScreen() {
                     <Ionicons
                       name={showPassword ? 'eye-off' : 'eye'}
                       size={20}
-                      color="#6b7280"
+                      color="#ec4899"
                     />
                   </TouchableOpacity>
                 </View>
@@ -283,7 +259,6 @@ export default function LoginScreen() {
             </Animated.View>
           </View>
 
-          {/* Remember Me & Forgot Password */}
           <View style={styles.optionsRow}>
             <TouchableOpacity
               style={styles.rememberMe}
@@ -306,7 +281,6 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Sign In Button */}
           <Animated.View style={buttonAnimatedStyle}>
             <TouchableOpacity
               activeOpacity={0.8}
@@ -316,7 +290,7 @@ export default function LoginScreen() {
               disabled={isLoading}
             >
               <LinearGradient
-                colors={['#ec4899', '#8b5cf6', '#3b82f6']}
+                colors={['#ec4899', '#c026d3', '#f472b6']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.signInButton}
@@ -333,16 +307,14 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </Animated.View>
 
-          {/* Divider */}
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
             <Text style={styles.dividerText}>Or continue with</Text>
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Social Login Buttons */}
           <View style={styles.socialRow}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.socialButton}
               onPress={() => Alert.alert('Coming Soon', 'Google login will be available soon!')}
             >
@@ -351,7 +323,7 @@ export default function LoginScreen() {
                 <Text style={styles.socialLabel}>Google</Text>
               </View>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.socialButton, styles.appleButton]}
               onPress={() => Alert.alert('Coming Soon', 'Apple login will be available soon!')}
             >
@@ -364,7 +336,6 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Sign Up Link */}
           <View style={styles.signUpContainer}>
             <Text style={styles.signUpText}>Don't have an account? </Text>
             <TouchableOpacity onPress={() => router.push('/register')}>
@@ -373,10 +344,9 @@ export default function LoginScreen() {
           </View>
         </BlurView>
 
-        {/* Floating Badges */}
         <View style={[styles.badge, styles.verifiedBadge]}>
           <LinearGradient
-            colors={['#10b981', '#059669']}
+            colors={['#ec4899', '#c026d3']}
             style={styles.badgeGradient}
           >
             <Text style={styles.badgeText}>✓ Verified</Text>
@@ -384,7 +354,7 @@ export default function LoginScreen() {
         </View>
         <View style={[styles.badge, styles.secureBadge]}>
           <LinearGradient
-            colors={['#3b82f6', '#6366f1']}
+            colors={['#f472b6', '#c026d3']}
             style={styles.badgeGradient}
           >
             <Text style={styles.badgeText}>🔒 Secure</Text>
@@ -398,7 +368,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9ff',
+    backgroundColor: '#fdf4ff',
   },
   scrollContent: {
     flexGrow: 1,
@@ -449,15 +419,17 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   card: {
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
     borderRadius: 30,
     padding: 30,
-    shadowColor: '#000',
+    shadowColor: '#ec4899',
     shadowOffset: { width: 0, height: 20 },
     shadowOpacity: 0.25,
     shadowRadius: 30,
     elevation: 20,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(236, 72, 153, 0.2)',
   },
   cornerDecor: {
     position: 'absolute',
@@ -494,7 +466,7 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#8b5cf6',
+    shadowColor: '#ec4899',
     shadowOffset: { width: 0, height: 15 },
     shadowOpacity: 0.4,
     shadowRadius: 25,
@@ -506,19 +478,19 @@ const styles = StyleSheet.create({
     left: 10,
     right: 10,
     height: 20,
-    backgroundColor: '#8b5cf6',
+    backgroundColor: '#ec4899',
     borderRadius: 50,
     opacity: 0.3,
   },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#8b5cf6',
+    color: '#831843',
     marginBottom: 5,
   },
   subtitle: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#9d174d',
   },
   inputContainer: {
     marginBottom: 20,
@@ -526,23 +498,23 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
+    color: '#831843',
     marginBottom: 8,
   },
   inputWrapper: {
     backgroundColor: '#fff',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    shadowColor: '#000',
+    borderColor: '#fce7f3',
+    shadowColor: '#ec4899',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 10,
     elevation: 5,
   },
   inputFocused: {
-    borderColor: '#8b5cf6',
-    shadowColor: '#8b5cf6',
+    borderColor: '#ec4899',
+    shadowColor: '#ec4899',
     shadowOpacity: 0.3,
     shadowRadius: 15,
     elevation: 10,
@@ -559,7 +531,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 15,
     fontSize: 16,
-    color: '#1f2937',
+    color: '#831843',
   },
   passwordInput: {
     paddingRight: 45,
@@ -584,31 +556,31 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: '#d1d5db',
+    borderColor: '#fce7f3',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
   },
   checkboxChecked: {
-    backgroundColor: '#8b5cf6',
-    borderColor: '#8b5cf6',
+    backgroundColor: '#ec4899',
+    borderColor: '#ec4899',
   },
   rememberText: {
     fontSize: 14,
-    color: '#374151',
+    color: '#831843',
     fontWeight: '500',
   },
   forgotText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#8b5cf6',
+    color: '#ec4899',
   },
   signInButton: {
     paddingVertical: 18,
     borderRadius: 16,
     alignItems: 'center',
     marginBottom: 25,
-    shadowColor: '#8b5cf6',
+    shadowColor: '#ec4899',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.5,
     shadowRadius: 20,
@@ -632,12 +604,12 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: '#fce7f3',
   },
   dividerText: {
     marginHorizontal: 15,
     fontSize: 13,
-    color: '#6b7280',
+    color: '#9d174d',
     fontWeight: '500',
   },
   socialRow: {
@@ -650,9 +622,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#e5e7eb',
+    borderColor: '#fce7f3',
     paddingVertical: 12,
-    shadowColor: '#000',
+    shadowColor: '#ec4899',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -671,12 +643,12 @@ const styles = StyleSheet.create({
   googleText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#4285F4',
+    color: '#ec4899',
   },
   socialLabel: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#374151',
+    color: '#831843',
   },
   appleLabelText: {
     color: '#fff',
@@ -688,12 +660,12 @@ const styles = StyleSheet.create({
   },
   signUpText: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#9d174d',
   },
   signUpLink: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#8b5cf6',
+    color: '#ec4899',
   },
   badge: {
     position: 'absolute',

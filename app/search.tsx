@@ -28,15 +28,15 @@ interface SearchResult {
 export default function SearchScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  
-  const { 
-    setSelectedPlace, 
-    addMarker, 
-    isRoutingMode, 
+
+  const {
+    setSelectedPlace,
+    addMarker,
+    isRoutingMode,
     isBookingMode,
-    routeStart, 
-    setRouteStart, 
-    setRouteEnd 
+    routeStart,
+    setRouteStart,
+    setRouteEnd
   } = useMap();
 
   // Debounce search query for live predictions
@@ -52,19 +52,16 @@ export default function SearchScreen() {
     queryKey: ['search', debouncedQuery],
     queryFn: async () => {
       if (!debouncedQuery.trim()) return [];
-      
-      // Focus on Lebanon by adding country code and bounding box
       const response = await fetch(
         `https://nominatim.openstreetmap.org/search?` +
         `format=json` +
         `&q=${encodeURIComponent(debouncedQuery)}` +
         `&countrycodes=lb` + // Lebanon country code
-        `&viewbox=35.1,34.4,36.6,33.0` + // Lebanon bounding box (lon_min,lat_max,lon_max,lat_min)
-        `&bounded=1` + // Restrict to bounding box
+        `&viewbox=35.1,34.4,36.6,33.0` + // Lebanon bounding box
+        `&bounded=1` +
         `&limit=10` +
         `&addressdetails=1`
       );
-      
       if (!response.ok) throw new Error('Search failed');
       return response.json() as Promise<SearchResult[]>;
     },
@@ -79,7 +76,7 @@ export default function SearchScreen() {
       title: place.display_name.split(',')[0],
       description: place.display_name,
     };
-    
+
     if (isBookingMode || isRoutingMode) {
       if (!routeStart) {
         setRouteStart(marker);
@@ -96,7 +93,7 @@ export default function SearchScreen() {
   const renderSearchResult = ({ item }: { item: SearchResult }) => {
     const [mainName, ...rest] = item.display_name.split(',');
     const subtitle = rest.slice(0, 2).join(',').trim();
-    
+
     return (
       <TouchableOpacity
         style={styles.resultItem}
@@ -104,7 +101,7 @@ export default function SearchScreen() {
         activeOpacity={0.7}
       >
         <View style={styles.resultIcon}>
-          <MapPin size={20} color="#007AFF" />
+          <MapPin size={20} color="#fb00ffff" />
         </View>
         <View style={styles.resultContent}>
           <Text style={styles.resultTitle} numberOfLines={1}>
@@ -127,7 +124,6 @@ export default function SearchScreen() {
     );
   };
 
-  // Popular Lebanese locations for quick search
   const popularPlaces = [
     'Hamra, Beirut',
     'Downtown Beirut',
@@ -142,25 +138,24 @@ export default function SearchScreen() {
   ];
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.searchContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
           >
             <X size={24} color="#333" />
           </TouchableOpacity>
-          
           <View style={styles.searchInputWrapper}>
             <Search size={20} color="#666" />
             <TextInput
               style={styles.searchInput}
               placeholder={
-                isBookingMode 
+                isBookingMode
                   ? (!routeStart ? 'Search pickup location...' : 'Search destination...')
                   : 'Search for a place in Lebanon...'
               }
@@ -176,60 +171,60 @@ export default function SearchScreen() {
             )}
           </View>
         </View>
-
-        {isLoading && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#007AFF" />
-            <Text style={styles.loadingText}>Searching...</Text>
-          </View>
-        )}
-
-        {searchResults && searchResults.length === 0 && !isLoading && searchQuery.trim() && (
-          <View style={styles.emptyContainer}>
-            <MapPin size={48} color="#CCC" />
-            <Text style={styles.emptyText}>No results found in Lebanon</Text>
-            <Text style={styles.emptySubtext}>Try searching for a different location</Text>
-          </View>
-        )}
-
-        {searchResults && searchResults.length > 0 && (
-          <FlatList
-            data={searchResults}
-            keyExtractor={(item) => item.place_id}
-            renderItem={renderSearchResult}
-            contentContainerStyle={styles.resultsList}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
-            showsVerticalScrollIndicator={false}
-          />
-        )}
-
-        {!searchQuery && !searchResults && (
-          <View style={styles.suggestionsContainer}>
-            {(isBookingMode || isRoutingMode) && (
-              <View style={styles.routeModeHeader}>
-                <Route size={20} color="#007AFF" />
-                <Text style={styles.routeModeText}>
-                  {!routeStart ? 'Select pickup location' : 'Select destination'}
-                </Text>
-              </View>
-            )}
-            <Text style={styles.suggestionsTitle}>Popular Places in Lebanon</Text>
-            {popularPlaces.map((place) => (
-              <TouchableOpacity
-                key={place}
-                style={styles.suggestionItem}
-                onPress={() => {
-                  setSearchQuery(place);
-                }}
-                activeOpacity={0.7}
-              >
-                <MapPin size={16} color="#007AFF" />
-                <Text style={styles.suggestionText}>{place}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
       </SafeAreaView>
+
+      {isLoading && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={styles.loadingText}>Searching...</Text>
+        </View>
+      )}
+
+      {searchResults && searchResults.length === 0 && !isLoading && searchQuery.trim() && (
+        <View style={styles.emptyContainer}>
+          <MapPin size={48} color="#CCC" />
+          <Text style={styles.emptyText}>No results found in Lebanon</Text>
+          <Text style={styles.emptySubtext}>Try searching for a different location</Text>
+        </View>
+      )}
+
+      {searchResults && searchResults.length > 0 && (
+        <FlatList
+          data={searchResults}
+          keyExtractor={(item) => item.place_id}
+          renderItem={renderSearchResult}
+          contentContainerStyle={styles.resultsList}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
+
+      {!searchQuery && !searchResults && (
+        <View style={styles.suggestionsContainer}>
+          {(isBookingMode || isRoutingMode) && (
+            <View style={styles.routeModeHeader}>
+              <Route size={20} color="#ff00a2ff" />
+              <Text style={styles.routeModeText}>
+                {!routeStart ? 'Select pickup location' : 'Select destination'}
+              </Text>
+            </View>
+          )}
+          <Text style={styles.suggestionsTitle}>Popular Places in Lebanon</Text>
+          {popularPlaces.map((place) => (
+            <TouchableOpacity
+              key={place}
+              style={styles.suggestionItem}
+              onPress={() => {
+                setSearchQuery(place);
+              }}
+              activeOpacity={0.7}
+            >
+              <MapPin size={16} color="#ff00ddff" />
+              <Text style={styles.suggestionText}>{place}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -237,20 +232,19 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#f692ea50',
   },
   safeArea: {
-    flex: 1,
+    backgroundColor: '#e6aaf4c0',
+    borderBottomWidth: 1,
+    borderBottomColor: '#d84bf758',
   },
   searchContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    gap: 12,
     alignItems: 'center',
+    gap: 12,
   },
   backButton: {
     width: 40,
@@ -371,7 +365,7 @@ const styles = StyleSheet.create({
   routeModeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E3F2FD',
+    backgroundColor: '#f363ddb6',
     padding: 12,
     borderRadius: 8,
     marginBottom: 16,
@@ -380,6 +374,6 @@ const styles = StyleSheet.create({
   routeModeText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#007AFF',
+    color: '#fb00ffff',
   },
 });

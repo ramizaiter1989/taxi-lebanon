@@ -94,7 +94,7 @@ export const [RideProvider, useRide] = createContextHook(() => {
       
       // Send appropriate notifications
       switch (status) {
-        case 'on_way':
+        case 'in_progress':
           const driver = MOCK_DRIVERS.find(d => d.id === currentRide.riderId);
           if (driver) {
             notificationService.notifyDriverArriving(driver.name);

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { normalizePhone } from '@/utils/phone';
 import {
   View,
   Text,
@@ -27,40 +28,63 @@ export default function VerifyOtpScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleVerifyOtp = async () => {
-    
-    if (!code) {
-      Alert.alert('Error', 'Please enter the OTP code.');
-      return;
-    }
-console.log("Sending OTP payload:", { phone, code});
-    setIsLoading(true);
-    try {
-        const payload = {
-            phone: phone.trim(),
-            code: code.trim(),
-            };
+  if (!code) {
+    Alert.alert('Error', 'Please enter the OTP code.');
+    return;
+  }
 
+  console.log("Sending OTP payload:", { phone, code });
 
-      const response = await verifyOtp(payload);
+  setIsLoading(true);
 
+  try {
+    const payload = {
+      phone: phone.trim(),
+      code: code.trim(),
+    };
 
-      // Assuming your backend responds with { message: string }
-      Alert.alert('Success', response.message || 'OTP verified successfully', [
+    const response = await verifyOtp(payload);
+console.log('helo', response);
+    // Success response from backend
+    if (response?.message) {
+      Alert.alert('Success', response.message, [
         { text: 'OK', onPress: () => router.push('/login') },
       ]);
-    } catch (error: any) {
-      let message = 'OTP verification failed.';
-      if (error.response?.data?.error) message = error.response.data.error;
-      Alert.alert('Error', message);
-    } finally {
-      setIsLoading(false);
+    } else if (response?.error) {
+      // Backend returned error
+      Alert.alert('Error', response.error);
+    } else {
+      // Unexpected response
+      Alert.alert('Error', 'OTP verification failed. Please try again.');
     }
-  };
+  } catch (error: any) {
+    console.log('OTP verify error:', error);
+
+    // Handle different error cases
+    let message = 'OTP verification failed.';
+
+    if (error?.response?.data?.error) {
+      // Axios error from backend
+      message = error.response.data.error;
+    } else if (error?.response?.data?.message) {
+      message = error.response.data.message;
+    } else if (error?.message) {
+      // Generic JS error or network error
+      message = error.message;
+    }
+
+    Alert.alert('Error', message);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+
 
   const handleResendOtp = async () => {
     setIsLoading(true);
     try {
-      const response = await resendOtp(phone.trim());
+      const response = await resendOtp(normalizePhone(phone));
       Alert.alert('Success', response.message || 'OTP resent successfully');
     } catch (error: any) {
       let message = 'Failed to resend OTP.';

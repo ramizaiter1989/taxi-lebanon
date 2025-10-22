@@ -38,7 +38,6 @@ interface Trip {
   status: 'completed' | 'cancelled';
 }
 
-// Mock data
 const MOCK_TRIPS: Trip[] = [
   {
     id: '1',
@@ -103,8 +102,7 @@ export default function TripHistoryScreen() {
   const [trips] = useState<Trip[]>(MOCK_TRIPS);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'completed' | 'cancelled'>('all');
-
-  const filteredTrips = trips.filter(trip => 
+  const filteredTrips = trips.filter(trip =>
     filterStatus === 'all' ? true : trip.status === filterStatus
   );
 
@@ -112,11 +110,11 @@ export default function TripHistoryScreen() {
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - date.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays === 0) return 'Today';
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays} days ago`;
-    
+
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
@@ -132,7 +130,7 @@ export default function TripHistoryScreen() {
     >
       <View style={styles.tripHeader}>
         <View style={styles.dateContainer}>
-          <Calendar size={16} color="#666" />
+          <Calendar size={16} color="#ec4899" />
           <Text style={styles.dateText}>{formatDate(item.date)}</Text>
           <Text style={styles.timeText}>{formatTime(item.date)}</Text>
         </View>
@@ -148,31 +146,29 @@ export default function TripHistoryScreen() {
           </Text>
         </View>
       </View>
-
       <View style={styles.tripRoute}>
         <View style={styles.routePoint}>
-          <View style={[styles.routeDot, { backgroundColor: '#FF5252' }]} />
+          <View style={[styles.routeDot, { backgroundColor: '#ec4899' }]} />
           <Text style={styles.locationText} numberOfLines={1}>
             {item.pickup}
           </Text>
         </View>
         <View style={styles.routeLine} />
         <View style={styles.routePoint}>
-          <View style={[styles.routeDot, { backgroundColor: '#9C27B0' }]} />
+          <View style={[styles.routeDot, { backgroundColor: '#831843' }]} />
           <Text style={styles.locationText} numberOfLines={1}>
             {item.destination}
           </Text>
         </View>
       </View>
-
       <View style={styles.tripFooter}>
         <View style={styles.tripStats}>
           <View style={styles.statItem}>
-            <Navigation size={14} color="#666" />
+            <Navigation size={14} color="#ec4899" />
             <Text style={styles.statText}>{item.distance} km</Text>
           </View>
           <View style={styles.statItem}>
-            <Clock size={14} color="#666" />
+            <Clock size={14} color="#ec4899" />
             <Text style={styles.statText}>{item.duration} min</Text>
           </View>
         </View>
@@ -185,14 +181,20 @@ export default function TripHistoryScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <ArrowLeft size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Trip History</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
+      <LinearGradient
+        colors={['#fdf2f8', '#fce7f3']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
+        <View style={styles.headerContent}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <ArrowLeft size={24} color="#831843" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Trip History</Text>
+          <View style={{ width: 40 }} />
+        </View>
+      </LinearGradient>
       <View style={styles.filterContainer}>
         <TouchableOpacity
           style={[
@@ -237,10 +239,9 @@ export default function TripHistoryScreen() {
           </Text>
         </TouchableOpacity>
       </View>
-
       {filteredTrips.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <MapPin size={64} color="#CCC" />
+          <MapPin size={64} color="#f472b6" />
           <Text style={styles.emptyText}>No trips found</Text>
         </View>
       ) : (
@@ -252,24 +253,26 @@ export default function TripHistoryScreen() {
           showsVerticalScrollIndicator={false}
         />
       )}
-
-      {/* Trip Details Modal */}
       <Modal visible={!!selectedTrip} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
+            <LinearGradient
+              colors={['#fdf2f8', '#fce7f3']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.modalHeader}
+            >
               <Text style={styles.modalTitle}>Trip Details</Text>
               <TouchableOpacity onPress={() => setSelectedTrip(null)}>
-                <X size={24} color="#666" />
+                <X size={24} color="#831843" />
               </TouchableOpacity>
-            </View>
-
+            </LinearGradient>
             {selectedTrip && (
               <View style={styles.detailsContent}>
                 <View style={styles.detailSection}>
                   <Text style={styles.detailSectionTitle}>Trip Information</Text>
                   <View style={styles.detailRow}>
-                    <Calendar size={20} color="#666" />
+                    <Calendar size={20} color="#ec4899" />
                     <Text style={styles.detailText}>
                       {selectedTrip.date.toLocaleDateString('en-US', {
                         weekday: 'long',
@@ -280,16 +283,15 @@ export default function TripHistoryScreen() {
                     </Text>
                   </View>
                   <View style={styles.detailRow}>
-                    <Clock size={20} color="#666" />
+                    <Clock size={20} color="#ec4899" />
                     <Text style={styles.detailText}>{formatTime(selectedTrip.date)}</Text>
                   </View>
                 </View>
-
                 <View style={styles.detailSection}>
                   <Text style={styles.detailSectionTitle}>Route</Text>
                   <View style={styles.detailRoute}>
                     <View style={styles.detailRoutePoint}>
-                      <MapPin size={20} color="#FF5252" />
+                      <MapPin size={20} color="#ec4899" />
                       <View style={styles.detailRouteInfo}>
                         <Text style={styles.detailRouteLabel}>Pickup</Text>
                         <Text style={styles.detailRouteText}>{selectedTrip.pickup}</Text>
@@ -297,7 +299,7 @@ export default function TripHistoryScreen() {
                     </View>
                     <View style={styles.detailRouteLine} />
                     <View style={styles.detailRoutePoint}>
-                      <Flag size={20} color="#9C27B0" />
+                      <Flag size={20} color="#831843" />
                       <View style={styles.detailRouteInfo}>
                         <Text style={styles.detailRouteLabel}>Destination</Text>
                         <Text style={styles.detailRouteText}>{selectedTrip.destination}</Text>
@@ -305,23 +307,21 @@ export default function TripHistoryScreen() {
                     </View>
                   </View>
                 </View>
-
                 <View style={styles.detailSection}>
                   <Text style={styles.detailSectionTitle}>Trip Stats</Text>
                   <View style={styles.statsGrid}>
                     <View style={styles.statsBox}>
-                      <Navigation size={24} color="#007AFF" />
+                      <Navigation size={24} color="#ec4899" />
                       <Text style={styles.statsValue}>{selectedTrip.distance} km</Text>
                       <Text style={styles.statsLabel}>Distance</Text>
                     </View>
                     <View style={styles.statsBox}>
-                      <Clock size={24} color="#34C759" />
+                      <Clock size={24} color="#ec4899" />
                       <Text style={styles.statsValue}>{selectedTrip.duration} min</Text>
                       <Text style={styles.statsLabel}>Duration</Text>
                     </View>
                   </View>
                 </View>
-
                 {selectedTrip.status === 'completed' && (
                   <>
                     <View style={styles.detailSection}>
@@ -341,7 +341,6 @@ export default function TripHistoryScreen() {
                         </View>
                       </View>
                     </View>
-
                     <View style={styles.detailSection}>
                       <Text style={styles.detailSectionTitle}>Payment</Text>
                       <View style={styles.paymentInfo}>
@@ -364,7 +363,6 @@ export default function TripHistoryScreen() {
                     </View>
                   </>
                 )}
-
                 {selectedTrip.status === 'cancelled' && (
                   <View style={styles.cancelledNotice}>
                     <Text style={styles.cancelledText}>This trip was cancelled</Text>
@@ -382,17 +380,24 @@ export default function TripHistoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#fdf4ff',
   },
   header: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
   },
   backButton: {
     width: 40,
@@ -403,7 +408,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#831843',
   },
   filterContainer: {
     flexDirection: 'row',
@@ -411,23 +416,23 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: 'white',
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#fce7f3',
   },
   filterButton: {
     flex: 1,
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 8,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#fdf2f8',
     alignItems: 'center',
   },
   filterButtonActive: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#ec4899',
   },
   filterText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#666',
+    color: '#831843',
   },
   filterTextActive: {
     color: 'white',
@@ -440,7 +445,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 18,
-    color: '#666',
+    color: '#831843',
     marginTop: 16,
   },
   list: {
@@ -451,11 +456,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowColor: '#f754ef7e',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: '#fce7f3',
   },
   tripHeader: {
     flexDirection: 'row',
@@ -470,12 +477,12 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 14,
-    color: '#666',
+    color: '#831843',
     fontWeight: '500',
   },
   timeText: {
     fontSize: 14,
-    color: '#999',
+    color: '#9d174d',
   },
   statusBadge: {
     paddingHorizontal: 10,
@@ -483,20 +490,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   statusCompleted: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#fce7f3',
   },
   statusCancelled: {
-    backgroundColor: '#FFEBEE',
+    backgroundColor: '#fecaca',
   },
   statusText: {
     fontSize: 12,
     fontWeight: '600',
   },
   statusCompletedText: {
-    color: '#34C759',
+    color: '#ec4899',
   },
   statusCancelledText: {
-    color: '#FF3B30',
+    color: '#f87171',
   },
   tripRoute: {
     marginBottom: 12,
@@ -514,12 +521,12 @@ const styles = StyleSheet.create({
   locationText: {
     flex: 1,
     fontSize: 14,
-    color: '#333',
+    color: '#831843',
   },
   routeLine: {
     width: 2,
     height: 16,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: '#fce7f3',
     marginLeft: 3,
     marginVertical: 2,
   },
@@ -539,12 +546,12 @@ const styles = StyleSheet.create({
   },
   statText: {
     fontSize: 12,
-    color: '#666',
+    color: '#831843',
   },
   fareText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#007AFF',
+    color: '#831843',
   },
   modalOverlay: {
     flex: 1,
@@ -563,12 +570,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#fce7f3',
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#831843',
   },
   detailsContent: {
     padding: 20,
@@ -579,7 +586,7 @@ const styles = StyleSheet.create({
   detailSectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#831843',
     marginBottom: 12,
   },
   detailRow: {
@@ -590,10 +597,10 @@ const styles = StyleSheet.create({
   },
   detailText: {
     fontSize: 14,
-    color: '#666',
+    color: '#831843',
   },
   detailRoute: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#fdf2f8',
     borderRadius: 12,
     padding: 16,
   },
@@ -607,18 +614,18 @@ const styles = StyleSheet.create({
   },
   detailRouteLabel: {
     fontSize: 12,
-    color: '#666',
+    color: '#9d174d',
     marginBottom: 4,
     textTransform: 'uppercase',
   },
   detailRouteText: {
     fontSize: 14,
-    color: '#333',
+    color: '#831843',
   },
   detailRouteLine: {
     width: 2,
     height: 20,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: '#fce7f3',
     marginLeft: 9,
     marginVertical: 8,
   },
@@ -628,7 +635,7 @@ const styles = StyleSheet.create({
   },
   statsBox: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#fdf2f8',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -636,18 +643,18 @@ const styles = StyleSheet.create({
   statsValue: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#831843',
     marginTop: 8,
     marginBottom: 4,
   },
   statsLabel: {
     fontSize: 12,
-    color: '#666',
+    color: '#9d174d',
   },
   driverInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#fdf2f8',
     borderRadius: 12,
     padding: 16,
   },
@@ -655,7 +662,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#ec4899',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -671,7 +678,7 @@ const styles = StyleSheet.create({
   driverName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: '#831843',
     marginBottom: 4,
   },
   ratingContainer: {
@@ -682,10 +689,10 @@ const styles = StyleSheet.create({
   ratingText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#666',
+    color: '#9d174d',
   },
   paymentInfo: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#fdf2f8',
     borderRadius: 12,
     padding: 16,
   },
@@ -697,37 +704,37 @@ const styles = StyleSheet.create({
   },
   paymentLabel: {
     fontSize: 14,
-    color: '#666',
+    color: '#9d174d',
   },
   paymentValue: {
     fontSize: 14,
-    color: '#333',
+    color: '#831843',
     fontWeight: '500',
   },
   paymentDivider: {
     height: 1,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: '#fce7f3',
     marginVertical: 8,
   },
   paymentTotalLabel: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#831843',
   },
   paymentTotalValue: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#007AFF',
+    color: '#ec4899',
   },
   cancelledNotice: {
-    backgroundColor: '#FFEBEE',
+    backgroundColor: '#fecaca',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
   },
   cancelledText: {
     fontSize: 14,
-    color: '#FF3B30',
+    color: '#f87171',
     fontWeight: '600',
   },
 });

@@ -39,7 +39,6 @@ export default function EnhancedBookingModal({ visible, onClose, onConfirm }: En
     setPaymentMethod,
     applyPromoCode,
   } = useMap();
-
   const [promoInput, setPromoInput] = useState('');
   const [promoError, setPromoError] = useState('');
 
@@ -58,26 +57,29 @@ export default function EnhancedBookingModal({ visible, onClose, onConfirm }: En
   };
 
   if (!rideBooking) return null;
-
   const savings = rideBooking.discount || 0;
 
   return (
     <Modal visible={visible} transparent animationType="slide">
       <View style={styles.modalOverlay}>
         <SafeAreaView style={styles.modalContainer} edges={['bottom']}>
-          <View style={styles.modalHeader}>
+          <LinearGradient
+            colors={['#fdf2f8', '#fce7f3']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.modalHeader}
+          >
             <Text style={styles.modalTitle}>Confirm Your Ride</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <X size={24} color="#666" />
+              <X size={24} color="#831843" />
             </TouchableOpacity>
-          </View>
-
+          </LinearGradient>
           <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
             {/* Trip Details */}
             <View style={styles.section}>
               <View style={styles.tripRoute}>
                 <View style={styles.routePoint}>
-                  <View style={[styles.routeDot, { backgroundColor: '#FF5252' }]} />
+                  <View style={[styles.routeDot, { backgroundColor: '#ec4899' }]} />
                   <View style={styles.routeInfo}>
                     <Text style={styles.routeLabel}>Pickup</Text>
                     <Text style={styles.routeAddress} numberOfLines={2}>
@@ -85,11 +87,9 @@ export default function EnhancedBookingModal({ visible, onClose, onConfirm }: En
                     </Text>
                   </View>
                 </View>
-
                 <View style={styles.routeLine} />
-
                 <View style={styles.routePoint}>
-                  <View style={[styles.routeDot, { backgroundColor: '#9C27B0' }]} />
+                  <View style={[styles.routeDot, { backgroundColor: '#831843' }]} />
                   <View style={styles.routeInfo}>
                     <Text style={styles.routeLabel}>Destination</Text>
                     <Text style={styles.routeAddress} numberOfLines={2}>
@@ -98,16 +98,15 @@ export default function EnhancedBookingModal({ visible, onClose, onConfirm }: En
                   </View>
                 </View>
               </View>
-
               <View style={styles.tripStats}>
                 <View style={styles.statBox}>
-                  <Navigation size={18} color="#007AFF" />
+                  <Navigation size={18} color="#ec4899" />
                   <Text style={styles.statValue}>
                     {(rideBooking.route.distance / 1000).toFixed(1)} km
                   </Text>
                 </View>
                 <View style={styles.statBox}>
-                  <Clock size={18} color="#34C759" />
+                  <Clock size={18} color="#831843" />
                   <Text style={styles.statValue}>
                     {Math.round(rideBooking.route.duration / 60)} min
                   </Text>
@@ -122,7 +121,7 @@ export default function EnhancedBookingModal({ visible, onClose, onConfirm }: En
                 {VEHICLE_OPTIONS.map((vehicle) => {
                   const isSelected = selectedVehicleType === vehicle.id;
                   const estimatedFare = Math.round(rideBooking.baseFare * vehicle.multiplier);
-                  
+
                   return (
                     <TouchableOpacity
                       key={vehicle.id}
@@ -155,54 +154,58 @@ export default function EnhancedBookingModal({ visible, onClose, onConfirm }: En
                 <TouchableOpacity
                   style={[
                     styles.paymentOption,
-                    selectedPaymentMethod === 'cash' && styles.paymentOptionSelected
+                    selectedPaymentMethod === 'cash' && styles.paymentOptionSelected,
                   ]}
                   onPress={() => setPaymentMethod('cash')}
                   activeOpacity={0.7}
                 >
-                  <Banknote size={24} color={selectedPaymentMethod === 'cash' ? '#007AFF' : '#666'} />
+                  <Banknote size={24} color={selectedPaymentMethod === 'cash' ? '#ec4899' : '#9d174d'} />
                   <Text style={[
                     styles.paymentText,
-                    selectedPaymentMethod === 'cash' && styles.paymentTextSelected
-                  ]}>Cash</Text>
+                    selectedPaymentMethod === 'cash' && styles.paymentTextSelected,
+                  ]}>
+                    Cash
+                  </Text>
                   {selectedPaymentMethod === 'cash' && (
-                    <Check size={20} color="#007AFF" style={styles.paymentCheck} />
+                    <Check size={20} color="#ec4899" style={styles.paymentCheck} />
                   )}
                 </TouchableOpacity>
-
                 <TouchableOpacity
                   style={[
                     styles.paymentOption,
-                    selectedPaymentMethod === 'card' && styles.paymentOptionSelected
+                    selectedPaymentMethod === 'card' && styles.paymentOptionSelected,
                   ]}
                   onPress={() => setPaymentMethod('card')}
                   activeOpacity={0.7}
                 >
-                  <CreditCard size={24} color={selectedPaymentMethod === 'card' ? '#007AFF' : '#666'} />
+                  <CreditCard size={24} color={selectedPaymentMethod === 'card' ? '#ec4899' : '#9d174d'} />
                   <Text style={[
                     styles.paymentText,
-                    selectedPaymentMethod === 'card' && styles.paymentTextSelected
-                  ]}>Card</Text>
+                    selectedPaymentMethod === 'card' && styles.paymentTextSelected,
+                  ]}>
+                    Card
+                  </Text>
                   {selectedPaymentMethod === 'card' && (
-                    <Check size={20} color="#007AFF" style={styles.paymentCheck} />
+                    <Check size={20} color="#ec4899" style={styles.paymentCheck} />
                   )}
                 </TouchableOpacity>
-
                 <TouchableOpacity
                   style={[
                     styles.paymentOption,
-                    selectedPaymentMethod === 'wallet' && styles.paymentOptionSelected
+                    selectedPaymentMethod === 'wallet' && styles.paymentOptionSelected,
                   ]}
                   onPress={() => setPaymentMethod('wallet')}
                   activeOpacity={0.7}
                 >
-                  <Wallet size={24} color={selectedPaymentMethod === 'wallet' ? '#007AFF' : '#666'} />
+                  <Wallet size={24} color={selectedPaymentMethod === 'wallet' ? '#ec4899' : '#9d174d'} />
                   <Text style={[
                     styles.paymentText,
-                    selectedPaymentMethod === 'wallet' && styles.paymentTextSelected
-                  ]}>Wallet</Text>
+                    selectedPaymentMethod === 'wallet' && styles.paymentTextSelected,
+                  ]}>
+                    Wallet
+                  </Text>
                   {selectedPaymentMethod === 'wallet' && (
-                    <Check size={20} color="#007AFF" style={styles.paymentCheck} />
+                    <Check size={20} color="#ec4899" style={styles.paymentCheck} />
                   )}
                 </TouchableOpacity>
               </View>
@@ -213,7 +216,7 @@ export default function EnhancedBookingModal({ visible, onClose, onConfirm }: En
               <Text style={styles.sectionTitle}>Promo Code</Text>
               <View style={styles.promoContainer}>
                 <View style={styles.promoInputWrapper}>
-                  <Tag size={20} color="#666" />
+                  <Tag size={20} color="#9d174d" />
                   <TextInput
                     style={styles.promoInput}
                     placeholder="Enter promo code"
@@ -234,7 +237,7 @@ export default function EnhancedBookingModal({ visible, onClose, onConfirm }: En
               ) : null}
               {promoCode && (
                 <View style={styles.promoSuccess}>
-                  <Check size={16} color="#34C759" />
+                  <Check size={16} color="#831843" />
                   <Text style={styles.promoSuccessText}>
                     Promo code "{promoCode}" applied!
                   </Text>
@@ -254,10 +257,10 @@ export default function EnhancedBookingModal({ visible, onClose, onConfirm }: En
                 </View>
                 <View style={styles.fareRow}>
                   <Text style={styles.fareLabel}>
-                    Vehicle ({VEHICLE_OPTIONS.find(v => v.id === selectedVehicleType)?.name})
+                    Vehicle ({VEHICLE_OPTIONS.find((v) => v.id === selectedVehicleType)?.name})
                   </Text>
                   <Text style={styles.fareValue}>
-                    {(Math.round(rideBooking.baseFare * (VEHICLE_OPTIONS.find(v => v.id === selectedVehicleType)?.multiplier || 1)) - rideBooking.baseFare).toLocaleString()} LBP
+                    {(Math.round(rideBooking.baseFare * (VEHICLE_OPTIONS.find((v) => v.id === selectedVehicleType)?.multiplier || 1)) - rideBooking.baseFare).toLocaleString()} LBP
                   </Text>
                 </View>
                 {savings > 0 && (
@@ -285,7 +288,7 @@ export default function EnhancedBookingModal({ visible, onClose, onConfirm }: En
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm} activeOpacity={0.8}>
-              <LinearGradient colors={['#34C759', '#28A745']} style={styles.confirmGradient}>
+              <LinearGradient colors={['#ec4899', '#c026d3']} style={styles.confirmGradient}>
                 <Check size={20} color="white" />
                 <Text style={styles.confirmButtonText}>
                   Confirm {rideBooking.finalFare.toLocaleString()} LBP
@@ -301,22 +304,19 @@ export default function EnhancedBookingModal({ visible, onClose, onConfirm }: En
 
 const styles = StyleSheet.create({
   modalOverlay: {
-  flex: 1,
-  backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  justifyContent: 'center', // Center vertically
-  alignItems: 'center',     // Center horizontally
-},
-modalContainer: {
-  flex: 1,                  // Fill entire screen
-  width: '100%',             // Full width
-  backgroundColor: 'white',
-  borderRadius: 0,          // Remove rounded corners if you want full screen
-},
-scrollContent: {
-  flex: 1,
-  paddingBottom: 20,        // Safe spacing at bottom
-},
-
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+  },
+  scrollContent: {
+    paddingBottom: 20,
+  },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -324,30 +324,29 @@ scrollContent: {
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#fce7f3',
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#831843',
   },
   closeButton: {
     padding: 4,
   },
- 
   section: {
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: '#fce7f3',
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#831843',
     marginBottom: 16,
   },
   tripRoute: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#fdf2f8',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -368,20 +367,20 @@ scrollContent: {
   },
   routeLabel: {
     fontSize: 12,
-    color: '#666',
+    color: '#9d174d',
     marginBottom: 4,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   routeAddress: {
     fontSize: 14,
-    color: '#333',
+    color: '#831843',
     fontWeight: '500',
   },
   routeLine: {
     width: 2,
     height: 20,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: '#fce7f3',
     marginLeft: 5,
     marginVertical: 4,
   },
@@ -393,7 +392,7 @@ scrollContent: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: '#fdf2f8',
     padding: 12,
     borderRadius: 8,
     gap: 8,
@@ -401,7 +400,7 @@ scrollContent: {
   statValue: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: '#831843',
   },
   vehicleGrid: {
     flexDirection: 'row',
@@ -410,7 +409,7 @@ scrollContent: {
   },
   vehicleCard: {
     width: '48%',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#fdf2f8',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -419,8 +418,8 @@ scrollContent: {
     position: 'relative',
   },
   vehicleCardSelected: {
-    backgroundColor: '#E3F2FD',
-    borderColor: '#007AFF',
+    backgroundColor: '#fce7f3',
+    borderColor: '#ec4899',
   },
   selectedBadge: {
     position: 'absolute',
@@ -429,7 +428,7 @@ scrollContent: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#ec4899',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -440,24 +439,24 @@ scrollContent: {
   vehicleName: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#831843',
     marginBottom: 4,
   },
   vehicleDesc: {
     fontSize: 12,
-    color: '#666',
+    color: '#9d174d',
     marginBottom: 4,
     textAlign: 'center',
   },
   vehicleCapacity: {
     fontSize: 11,
-    color: '#999',
+    color: '#9d174d',
     marginBottom: 8,
   },
   vehicleFare: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#007AFF',
+    color: '#ec4899',
   },
   paymentOptions: {
     flexDirection: 'row',
@@ -469,23 +468,23 @@ scrollContent: {
     alignItems: 'center',
     padding: 16,
     borderRadius: 12,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#fdf2f8',
     borderWidth: 2,
     borderColor: 'transparent',
     position: 'relative',
   },
   paymentOptionSelected: {
-    backgroundColor: '#E3F2FD',
-    borderColor: '#007AFF',
+    backgroundColor: '#fce7f3',
+    borderColor: '#ec4899',
   },
   paymentText: {
     fontSize: 14,
-    color: '#666',
+    color: '#9d174d',
     marginTop: 8,
     fontWeight: '500',
   },
   paymentTextSelected: {
-    color: '#007AFF',
+    color: '#ec4899',
     fontWeight: '600',
   },
   paymentCheck: {
@@ -501,7 +500,7 @@ scrollContent: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#fdf2f8',
     borderRadius: 10,
     paddingHorizontal: 12,
     gap: 8,
@@ -510,10 +509,10 @@ scrollContent: {
     flex: 1,
     fontSize: 16,
     paddingVertical: 12,
-    color: '#333',
+    color: '#831843',
   },
   applyButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#ec4899',
     borderRadius: 10,
     paddingHorizontal: 20,
     justifyContent: 'center',
@@ -525,13 +524,13 @@ scrollContent: {
   },
   promoError: {
     fontSize: 12,
-    color: '#FF3B30',
+    color: '#f87171',
     marginTop: 8,
   },
   promoSuccess: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#fce7f3',
     padding: 12,
     borderRadius: 8,
     marginTop: 8,
@@ -539,11 +538,11 @@ scrollContent: {
   },
   promoSuccessText: {
     fontSize: 14,
-    color: '#34C759',
+    color: '#831843',
     fontWeight: '500',
   },
   fareBreakdown: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#fdf2f8',
     borderRadius: 12,
     padding: 16,
   },
@@ -555,59 +554,59 @@ scrollContent: {
   },
   fareLabel: {
     fontSize: 14,
-    color: '#666',
+    color: '#9d174d',
   },
   fareValue: {
     fontSize: 14,
-    color: '#333',
+    color: '#831843',
     fontWeight: '500',
   },
   discountLabel: {
-    color: '#34C759',
+    color: '#831843',
   },
   discountValue: {
-    color: '#34C759',
+    color: '#831843',
   },
   fareDivider: {
     height: 1,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: '#fce7f3',
     marginVertical: 8,
   },
   fareTotalLabel: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#831843',
   },
   fareTotalValue: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#007AFF',
+    color: '#ec4899',
   },
   bottomActions: {
     flexDirection: 'row',
     padding: 20,
     gap: 12,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: '#fce7f3',
   },
   cancelButton: {
     flex: 1,
     paddingVertical: 16,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#E0E0E0',
+    borderColor: '#fce7f3',
     alignItems: 'center',
     justifyContent: 'center',
   },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#666',
+    color: '#9d174d',
   },
   confirmButton: {
     flex: 2,
     borderRadius: 12,
-    shadowColor: '#34C759',
+    shadowColor: '#ec4899',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
