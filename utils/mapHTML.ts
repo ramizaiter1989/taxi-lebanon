@@ -1,158 +1,150 @@
-const mapHTML = `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <style>
+// utils/mapHTML.ts
+
+  const mapHTML = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+      <style>
         body { margin: 0; padding: 0; }
         #map { height: 100vh; width: 100vw; }
-    </style>
-</head>
-<body>
-    <div id="map"></div>
-    <script>
-        let map = L.map('map').setView([33.8938, 35.5018], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors',
-            maxZoom: 19
-        }).addTo(map);
+        .leaflet-container { background: #f0f0f0; }
+      </style>
+    </head>
+    <body>
+      <div id="map"></div>
+      <script>
+        var map = L.map('map', {
+          zoomControl: false,
+          attributionControl: false
+        }).setView([40.7128, -74.0060], 13);
 
-        let userMarker = null;
-        let routeMarkers = [];
-        let routeLayer = null;
+        var layers = {
+          street: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }),
+          satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }),
+          terrain: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17 })
+        };
 
-        // Custom icons
-        const userIcon = L.divIcon({
-            className: 'user-location-marker',
-            html: '<div style="background: #FF85C0; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
-            iconSize: [22, 22],
-            iconAnchor: [11, 11]
-        });
-        const startIcon = L.divIcon({
-            className: 'start-marker',
-            html: '<div style="background: #10b981; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>',
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-        });
-        const endIcon = L.divIcon({
-            className: 'end-marker',
-            html: '<div style="background: #ef4444; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>',
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
+        layers.street.addTo(map);
+        var currentLayer = 'street';
+        var markers = {};
+        var userMarker = null;
+        var routeStartMarker = null;
+        var routeEndMarker = null;
+        var routeLayer = null;
+
+        var customIcon = L.icon({
+          iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+          iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
         });
 
-        // Message handler
-        window.addEventListener('message', function(event) {
-            try {
-                const data = JSON.parse(event.data);
-                console.log('WebView received:', data.type, data);
+        var userIcon = L.icon({
+          iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+          iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
 
-                switch(data.type) {
-                    case 'setUserLocation':
-                        if (userMarker) {
-                            userMarker.setLatLng([data.lat, data.lng]);
-                        } else {
-                            userMarker = L.marker([data.lat, data.lng], { icon: userIcon }).addTo(map);
-                        }
-                        window.ReactNativeWebView.postMessage(JSON.stringify({
-                            type: 'locationUpdated',
-                            lat: data.lat,
-                            lng: data.lng
-                        }));
-                        break;
+        var startIcon = L.icon({
+          iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+          iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
 
-                    case 'setView':
-                        map.setView([data.lat, data.lng], data.zoom || 14);
-                        break;
+        var endIcon = L.icon({
+          iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-violet.png',
+          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+          iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
 
-                    case 'addRouteMarker':
-                        const icon = data.markerType === 'start' ? startIcon : endIcon;
-                        const marker = L.marker([data.lat, data.lng], { icon: icon })
-                            .addTo(map)
-                            .bindPopup(data.title || '');
-                        routeMarkers.push(marker);
-                        break;
+        map.on('click', function(e) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'mapClick',
+            lat: e.latlng.lat,
+            lng: e.latlng.lng
+          }));
+        });
 
-                    case 'clearMarkers':
-                        routeMarkers.forEach(marker => map.removeLayer(marker));
-                        routeMarkers = [];
-                        break;
+        document.addEventListener('message', function(e) { handleMessage(e.data); });
+        window.addEventListener('message', function(e) { handleMessage(e.data); });
 
-                    case 'clearRoute':
-                        if (routeLayer) {
-                            map.removeLayer(routeLayer);
-                            routeLayer = null;
-                        }
-                        break;
-
-                    case 'drawRoute':
-                        // Clear existing route
-                        if (routeLayer) {
-                            map.removeLayer(routeLayer);
-                        }
-
-                        // Draw new route using coordinates from OSRM/ORS
-                        if (!data.coordinates || data.coordinates.length === 0) {
-                            throw new Error('No coordinates provided for route');
-                        }
-
-                        // Coordinates are in [lng, lat] format, need to convert to [lat, lng]
-                        const latLngs = data.coordinates.map(coord => [coord[1], coord[0]]);
-
-                        routeLayer = L.polyline(latLngs, {
-                            color: data.color || '#FF85C0',
-                            weight: 5,
-                            opacity: 0.8,
-                            lineJoin: 'round',
-                            lineCap: 'round'
-                        }).addTo(map);
-
-                        // Fit map to route bounds
-                        map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
-
-                        window.ReactNativeWebView.postMessage(JSON.stringify({
-                            type: 'routeDrawn',
-                            success: true
-                        }));
-                        break;
-
-                    case 'showRoute':
-                        // Fallback: simple straight line (for when OSRM fails)
-                        if (routeLayer) {
-                            map.removeLayer(routeLayer);
-                        }
-
-                        routeLayer = L.polyline([
-                            [data.start.lat, data.start.lng],
-                            [data.end.lat, data.end.lng]
-                        ], {
-                            color: '#FF85C0',
-                            weight: 4,
-                            opacity: 0.6,
-                            dashArray: '10, 10'
-                        }).addTo(map);
-
-                        map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
-                        break;
+        function handleMessage(data) {
+          try {
+            var message = JSON.parse(data);
+            
+            switch(message.type) {
+              case 'setView':
+                map.setView([message.lat, message.lng], message.zoom || map.getZoom());
+                break;
+              case 'addMarker':
+                if (markers[message.id]) map.removeLayer(markers[message.id]);
+                var marker = L.marker([message.lat, message.lng], { icon: customIcon })
+                  .addTo(map)
+                  .bindPopup('<b>' + message.title + '</b><br>' + message.description);
+                markers[message.id] = marker;
+                break;
+              case 'setUserLocation':
+                if (userMarker) map.removeLayer(userMarker);
+                userMarker = L.marker([message.lat, message.lng], { icon: userIcon })
+                  .addTo(map)
+                  .bindPopup('Your Location');
+                break;
+              case 'zoomIn':
+                map.zoomIn();
+                break;
+              case 'zoomOut':
+                map.zoomOut();
+                break;
+              case 'changeLayer':
+                map.removeLayer(layers[currentLayer]);
+                layers[message.layer].addTo(map);
+                currentLayer = message.layer;
+                break;
+              case 'addRouteMarker':
+                var icon = message.markerType === 'start' ? startIcon : endIcon;
+                var marker = L.marker([message.lat, message.lng], { icon: icon })
+                  .addTo(map)
+                  .bindPopup('<b>' + (message.markerType === 'start' ? 'Pickup: ' : 'Destination: ') + message.title + '</b>');
+                
+                if (message.markerType === 'start') {
+                  if (routeStartMarker) map.removeLayer(routeStartMarker);
+                  routeStartMarker = marker;
+                } else {
+                  if (routeEndMarker) map.removeLayer(routeEndMarker);
+                  routeEndMarker = marker;
                 }
-            } catch (error) {
-                console.error('WebView error:', error);
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                    type: 'error',
-                    message: error.message
-                }));
+                break;
+              case 'showRoute':
+                if (routeLayer) map.removeLayer(routeLayer);
+                var coordinates = message.route.coordinates.map(function(coord) {
+                  return [coord[1], coord[0]];
+                });
+                routeLayer = L.polyline(coordinates, {
+                  color: '#007AFF',
+                  weight: 5,
+                  opacity: 0.8
+                }).addTo(map);
+                map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
+                break;
+              case 'clearRoute':
+                if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
+                if (routeStartMarker) { map.removeLayer(routeStartMarker); routeStartMarker = null; }
+                if (routeEndMarker) { map.removeLayer(routeEndMarker); routeEndMarker = null; }
+                break;
             }
-        });
+          } catch(error) {
+            console.error('Error handling message:', error);
+          }
+        }
 
-        // Initial load complete
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'mapLoaded'
-        }));
-    </script>
-</body>
-</html>
-`;
+        setTimeout(function() {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }));
+        }, 100);
+      </script>
+    </body>
+    </html>
+  `;
+
 export default mapHTML;

@@ -79,7 +79,7 @@ export default function RiderProfileScreen() {
           } finally {
             await AsyncStorage.removeItem('token');
             clearUser();
-            router.replace('/role-selection');
+            router.replace('/login');
           }
         },
       },
