@@ -6,10 +6,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_BASE_URL } from '@/constants/config';
 import { router } from 'expo-router';
+import { useUser } from '@/hooks/user-store';
 
 export default function ClientProfileScreen() {
   const [profile, setProfile] = useState<PassengerProfile | null>(null);
-
+  const { user, logout } = useUser();
 type PassengerProfile = {
   name: string;
   email: string;
@@ -37,30 +38,21 @@ type PassengerProfile = {
   }, []);
 
   const handleLogout = () => {
-    const performLogout = async () => {
-      try {
-        const token = await AsyncStorage.getItem('token');
-        if (token) {
-          await axios.post(`${API_BASE_URL}/logout`, {}, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-        }
-      } catch (error) {
-        console.log('Logout failed:', error);
-      } finally {
-        await AsyncStorage.removeItem('token');
-        router.replace('/role-selection');
-      }
-    };
+
+    const confirmlogout=  () =>
+    {
+      logout();
+    router.replace('/login');}
 
     Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', onPress: performLogout }
-      ]
-    );
+          'Logout',
+          'Are you sure you want to logout?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Logout', onPress: confirmlogout }
+          ]
+        );
+    
   };
 
   return (

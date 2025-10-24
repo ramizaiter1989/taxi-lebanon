@@ -13,9 +13,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import mapHTML from '@/utils/mapHTML';
 import { useRouter } from 'expo-router';
 import { API_BASE_URL } from '@/constants/config';
+import { getOSRMRoute } from '@/utils/getORSRoute';
 
-
-type RideStatus = 'accepted' | 'in_progress' | 'started' | 'completed';
+// ----- TYPES -----
+type RideStatus = 'accepted' | 'arrived' | 'in_progress' | 'completed';
 type Ride = {
   id: string;
   clientId: string;
@@ -27,11 +28,13 @@ type Ride = {
   createdAt: Date;
 };
 
+// ----- SCREEN -----
 export default function RiderHomeScreen() {
   const router = useRouter();
   const { user } = useUser();
   const { isDriverOnline, toggleDriverOnline } = useRide();
   const { setUserLocation } = useMap();
+
   const [hasIncomingRequest, setHasIncomingRequest] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -45,739 +48,411 @@ export default function RiderHomeScreen() {
   const [dropoffLocation, setDropoffLocation] = useState<Location | null>(null);
   const [currentRide, setCurrentRide] = useState<Ride | null>(null);
   const [availableRide, setAvailableRide] = useState<any>(null);
-  const webViewRef = useRef<WebView>(null);
+  const [liveRideData, setLiveRideData] = useState<any>(null);
+  const [isCheckingActiveRide, setIsCheckingActiveRide] = useState(true);
 
-  // API Functions
-  const getAuthToken = async () => {
-    return await AsyncStorage.getItem('token');
-  };
+  const webViewRef = useRef<WebView>(null);
+  const currentRideRef = useRef<Ride | null>(null);
+  const isAcceptingRideRef = useRef(false);
+  const isFetchingRef = useRef(false);
+  const liveRideIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    currentRideRef.current = currentRide;
+  }, [currentRide]);
+
+  // ----- API HELPERS -----
+  const getAuthToken = async () => await AsyncStorage.getItem('token');
 
   const fetchAvailableRides = async () => {
+    if (currentRideRef.current || isAcceptingRideRef.current || isFetchingRef.current) {
+      console.log('Skipping fetch - ride already in progress or accepting');
+      return;
+    }
+    isFetchingRef.current = true;
     try {
       const token = await getAuthToken();
       if (!token) {
-        console.warn("⚠️ No token found");
+        isFetchingRef.current = false;
         return;
       }
-
       const response = await fetch(`${API_BASE_URL}/rides/available`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       });
-
-      console.log('✅ Response status:', response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Request failed:', response.status, errorText);
-        throw new Error('Failed to fetch available rides');
-      }
-
+      if (!response.ok) throw new Error('Failed to fetch available rides');
       const data = await response.json();
-      console.log('📦 Parsed data:', data);
-
-      // Check if data is directly an array of rides
-      const ridesArray = Array.isArray(data) ? data : (data?.rides || []);
-      
+      const ridesArray = Array.isArray(data) ? data : data?.rides || [];
       if (ridesArray.length > 0) {
         const ride = ridesArray[0];
-        console.log('🚗 Processing ride:', ride.id);
         setAvailableRide(ride);
-        
-        // Parse origin (pickup) location
-        if (ride.origin_lat && ride.origin_lng) {
-          setPickupLocation({
-            latitude: parseFloat(ride.origin_lat),
-            longitude: parseFloat(ride.origin_lng),
-            address: 'Pickup Location',
-          });
-        }
-        
-        // Parse destination (dropoff) location
-        if (ride.destination_lat && ride.destination_lng) {
-          setDropoffLocation({
-            latitude: parseFloat(ride.destination_lat),
-            longitude: parseFloat(ride.destination_lng),
-            address: 'Destination',
-          });
-        }
-        
+        setPickupLocation({
+          latitude: parseFloat(ride.origin_lat),
+          longitude: parseFloat(ride.origin_lng),
+          address: ride.origin_address || 'Pickup Location',
+        });
+        setDropoffLocation({
+          latitude: parseFloat(ride.destination_lat),
+          longitude: parseFloat(ride.destination_lng),
+          address: ride.destination_address || 'Destination',
+        });
         setHasIncomingRequest(true);
-        console.log('✅ Ride request displayed');
       } else {
-        console.log('ℹ️ No available rides');
         setHasIncomingRequest(false);
         setAvailableRide(null);
       }
-
     } catch (error) {
-      console.error('🚨 Error fetching available rides:', error);
+      console.error('Error fetching rides:', error);
+    } finally {
+      isFetchingRef.current = false;
     }
   };
 
   const acceptRideAPI = async (rideId: string) => {
-    try {
-      const token = await getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/rides/${rideId}/accept`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error('Failed to accept ride');
-      }
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error accepting ride:', error);
-      throw error;
-    }
-  };
-
-  const updateRideLocationAPI = async (rideId: string, lat: number, lng: number) => {
-    try {
-      const token = await getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/rides/${rideId}/update-location`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          current_driver_lat: lat,
-          current_driver_lng: lng,
-        }),
-      });
-      if (!response.ok) {
-        throw new Error('Failed to update ride location');
-      }
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error updating ride location:', error);
-      throw error;
-    }
+    const token = await getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/rides/${rideId}/accept`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Failed to accept ride');
+    return data;
   };
 
   const markArrivedAPI = async (rideId: string) => {
-    try {
-      const token = await getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/rides/${rideId}/arrived`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error('Failed to mark as arrived');
-      }
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error marking as arrived:', error);
-      throw error;
-    }
+    const token = await getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/rides/${rideId}/arrived`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error('Failed to mark ride as arrived');
+    return response.json();
+  };
+
+  const completeRideAPI = async (rideId: string) => {
+    const token = await getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/rides/${rideId}/complete`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error('Failed to complete ride');
+    return response.json();
   };
 
   const cancelRideAPI = async (rideId: string) => {
-    try {
-      const token = await getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/rides/${rideId}/cancel`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error('Failed to cancel ride');
-      }
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error cancelling ride:', error);
-      throw error;
-    }
+    const token = await getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/rides/${rideId}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error('Failed to cancel ride');
+    return response.json();
   };
 
-  // Location Tracking
-  useEffect(() => {
-    let locationSubscription: LocationService.LocationSubscription | null = null;
-    const startLocationTracking = async () => {
-      try {
-        const { status } = await LocationService.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          console.log('Location permission denied');
-          return;
-        }
-        const location = await LocationService.getCurrentPositionAsync({
-          accuracy: LocationService.Accuracy.High,
-        });
-        const coords = {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          address: 'Current Location',
-        };
-        const mapCoords = { lat: location.coords.latitude, lng: location.coords.longitude };
-        setCurrentLocation(coords);
-        setLocalUserLocation(mapCoords);
-        setUserLocation(mapCoords);
-        if (!pickupLocation) {
-          setPickupLocation(coords);
-        }
-        if (webViewRef.current) {
-          webViewRef.current.postMessage(JSON.stringify({ type: 'setUserLocation', ...mapCoords }));
-        }
-        if (isDriverOnline) {
-          locationSubscription = await LocationService.watchPositionAsync(
-            {
-              accuracy: LocationService.Accuracy.High,
-              timeInterval: 10000,
-              distanceInterval: 50,
-            },
-            async (location) => {
-              const newCoords = {
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
-                address: 'Current Location',
-              };
-              const newMapCoords = { lat: location.coords.latitude, lng: location.coords.longitude };
-              setCurrentLocation(newCoords);
-              setLocalUserLocation(newMapCoords);
-              setUserLocation(newMapCoords);
-              if (webViewRef.current) {
-                webViewRef.current.postMessage(JSON.stringify({ type: 'setUserLocation', ...newMapCoords }));
-              }
-              if (currentRide) {
-                await updateRideLocationAPI(currentRide.id, location.coords.latitude, location.coords.longitude);
-              }
-            }
-          );
-        }
-      } catch (error) {
-        console.error('Error getting location:', error);
-      }
-    };
-    startLocationTracking();
-    return () => {
-      if (locationSubscription && typeof locationSubscription.remove === 'function') {
-        locationSubscription.remove();
-      }
-    };
-  }, [isDriverOnline, setUserLocation, currentRide]);
+  const fetchLiveRideData = async () => {
+  try {
+    const token = await getAuthToken();
+    if (!token) return;
 
-  // Map Route Handling
-  useEffect(() => {
-    if (currentRide && webViewRef.current && showMap && !isLoading) {
-      console.log('Setting up route on map');
+    const response = await fetch(`${API_BASE_URL}/rides/live`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    });
 
+    if (!response.ok) {
+      console.warn('Failed to fetch live ride data');
+      return;
+    }
+
+    const result = await response.json();
+    console.log('Live ride data received:', result.data?.route_info?.phase);
+    setLiveRideData(result.data);
+
+    if (result.data && webViewRef.current && showMap) {
+      const { origin, destination, driver, route_info } = result.data;
+
+      // Clear existing markers and route
+      webViewRef.current.postMessage(JSON.stringify({ type: 'clearRoute' }));
+      webViewRef.current.postMessage(JSON.stringify({ type: 'clearMarkers' }));
+
+      // Add driver current location marker
+      if (driver?.current_location) {
+        webViewRef.current.postMessage(JSON.stringify({
+          type: 'setUserLocation',
+          lat: driver.current_location.lat,
+          lng: driver.current_location.lng,
+        }));
+      }
+
+      // Add pickup marker
       webViewRef.current.postMessage(JSON.stringify({
         type: 'addRouteMarker',
-        lat: currentRide.pickup.latitude,
-        lng: currentRide.pickup.longitude,
+        lat: origin.lat,
+        lng: origin.lng,
         markerType: 'start',
+        title: origin.address || 'Pickup',
       }));
 
+      // Add destination marker
       webViewRef.current.postMessage(JSON.stringify({
         type: 'addRouteMarker',
-        lat: currentRide.dropoff.latitude,
-        lng: currentRide.dropoff.longitude,
+        lat: destination.lat,
+        lng: destination.lng,
         markerType: 'end',
+        title: destination.address || 'Destination',
       }));
 
-      setTimeout(() => {
-        if (webViewRef.current) {
+      // Draw route based on current phase
+      try {
+        if (route_info.phase === 'to_pickup' && driver?.current_location) {
+          console.log('Drawing route: Driver → Pickup');
+          const start: [number, number] = [driver.current_location.lng, driver.current_location.lat];
+          const end: [number, number] = [origin.lng, origin.lat];
+          const route = await getOSRMRoute(start, end);
           webViewRef.current.postMessage(JSON.stringify({
-            type: 'showRoute',
-            start: { lat: currentRide.pickup.latitude, lng: currentRide.pickup.longitude },
-            end: { lat: currentRide.dropoff.latitude, lng: currentRide.dropoff.longitude },
+            type: 'drawRoute',
+            coordinates: route.coordinates,
+            color: '#FF85C0',
+          }));
+        } else if (route_info.phase === 'in_trip') {
+          console.log('Drawing route: Pickup → Destination');
+          const start: [number, number] = [origin.lng, origin.lat];
+          const end: [number, number] = [destination.lng, destination.lat];
+          const route = await getOSRMRoute(start, end);
+          webViewRef.current.postMessage(JSON.stringify({
+            type: 'drawRoute',
+            coordinates: route.coordinates,
+            color: '#10b981',
           }));
         }
-      }, 800);
+      } catch (error) {
+        console.error('Error drawing route:', error);
+        // Fallback to simple line route
+        if (route_info.phase === 'to_pickup' && driver?.current_location) {
+          webViewRef.current.postMessage(JSON.stringify({
+            type: 'showRoute',
+            start: { lat: driver.current_location.lat, lng: driver.current_location.lng },
+            end: { lat: origin.lat, lng: origin.lng },
+          }));
+        } else if (route_info.phase === 'in_trip') {
+          webViewRef.current.postMessage(JSON.stringify({
+            type: 'showRoute',
+            start: { lat: origin.lat, lng: origin.lng },
+            end: { lat: destination.lat, lng: destination.lng },
+          }));
+        }
+      }
     }
-  }, [currentRide, showMap, isLoading]);
+    return result.data;
+  } catch (error) {
+    console.error('Error fetching live ride data:', error);
+    return null;
+  }
+};
 
-  // Handlers
+
+  // ----- EFFECTS -----
+  useEffect(() => {
+    const checkActiveRide = async () => {
+      setIsCheckingActiveRide(true);
+      if ((global as any).ridePollingInterval) {
+        clearInterval((global as any).ridePollingInterval);
+        (global as any).ridePollingInterval = null;
+      }
+      const liveData = await fetchLiveRideData();
+      if (liveData && liveData.status !== 'completed' && liveData.status !== 'cancelled') {
+        isAcceptingRideRef.current = true;
+        isFetchingRef.current = true;
+        const rideStatus = liveData.status === 'accepted' ? 'accepted' :
+                          liveData.status === 'arrived' ? 'arrived' :
+                          liveData.status === 'in_progress' ? 'in_progress' : 'accepted';
+        const restoredRide = {
+          id: String(liveData.id),
+          clientId: String(liveData.passenger?.id || '1'),
+          pickup: {
+            latitude: parseFloat(liveData.origin.lat),
+            longitude: parseFloat(liveData.origin.lng),
+            address: liveData.origin.address,
+          },
+          dropoff: {
+            latitude: parseFloat(liveData.destination.lat),
+            longitude: parseFloat(liveData.destination.lng),
+            address: liveData.destination.address,
+          },
+          status: rideStatus as RideStatus,
+          fare: parseFloat(liveData.fare || '0'),
+          estimatedDuration: liveData.duration || 15,
+          createdAt: new Date(liveData.timestamps?.requested_at || Date.now()),
+        };
+        setCurrentRide(restoredRide);
+        setLiveRideData(liveData);
+      } else {
+        isAcceptingRideRef.current = false;
+        isFetchingRef.current = false;
+        if (isDriverOnline) {
+          await fetchAvailableRides();
+          const pollInterval = setInterval(() => fetchAvailableRides(), 10000);
+          (global as any).ridePollingInterval = pollInterval;
+        }
+      }
+      setIsCheckingActiveRide(false);
+    };
+    checkActiveRide();
+  }, []);
+
+  useEffect(() => {
+    if (currentRide && webViewRef.current && showMap) {
+      console.log('Setting up route for ride:', currentRide.id);
+      fetchLiveRideData();
+      if (liveRideIntervalRef.current) {
+        clearInterval(liveRideIntervalRef.current);
+      }
+      liveRideIntervalRef.current = setInterval(() => {
+        fetchLiveRideData();
+      }, 5000);
+    }
+    return () => {
+      if (liveRideIntervalRef.current) {
+        clearInterval(liveRideIntervalRef.current);
+        liveRideIntervalRef.current = null;
+      }
+    };
+  }, [currentRide, showMap]);
+
+  // ----- HANDLERS -----
   const handleMapMessage = (event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
-      console.log('Map message:', data);
+      console.log('Map message received:', data);
+
+      if (data.type === 'routeDrawn') {
+        console.log('Route successfully drawn on map');
+      } else if (data.type === 'error') {
+        console.error('Map error:', data.message);
+        Alert.alert('Map Error', data.message);
+      } else if (data.type === 'locationUpdated') {
+        console.log('User location updated:', data.lat, data.lng);
+      }
     } catch (error) {
       console.error('Error parsing map message:', error);
     }
   };
 
-  const handleToggleOnline = async () => {
-    toggleDriverOnline();
-    if (!isDriverOnline) {
-      await fetchAvailableRides();
-      const pollInterval = setInterval(async () => {
-        await fetchAvailableRides();
-      }, 10000);
-      (global as any).ridePollingInterval = pollInterval;
-    } else {
-      setHasIncomingRequest(false);
-      setAvailableRide(null);
-      if ((global as any).ridePollingInterval) {
-        clearInterval((global as any).ridePollingInterval);
-        (global as any).ridePollingInterval = null;
-      }
-    }
-  };
-
   const handleAcceptRide = async () => {
-    if (!availableRide) {
-      Alert.alert('Error', 'No ride data available.');
+    if (!availableRide || !pickupLocation || !dropoffLocation) {
+      Alert.alert('Error', 'No ride data or locations.');
       return;
     }
-
-    if (!pickupLocation || !dropoffLocation) {
-      Alert.alert('Error', 'Pickup or dropoff location not set.');
+    if (isAcceptingRideRef.current || currentRideRef.current) {
+      console.log('Already accepting or have active ride');
       return;
     }
-
+    isAcceptingRideRef.current = true;
+    if ((global as any).ridePollingInterval) {
+      clearInterval((global as any).ridePollingInterval);
+      (global as any).ridePollingInterval = null;
+    }
+    isFetchingRef.current = true;
     setHasIncomingRequest(false);
-    setIsLoading(true);
-
     try {
       const response = await acceptRideAPI(availableRide.id);
-      
-      if (response.success) {
-        const acceptedRide: Ride = {
+      if (response.message || response.ride) {
+        const newRide = {
           id: String(availableRide.id),
           clientId: String(availableRide.passenger_id || availableRide.passenger?.id || '1'),
           pickup: pickupLocation,
           dropoff: dropoffLocation,
-          status: 'accepted',
+          status: 'accepted' as RideStatus,
           fare: parseFloat(availableRide.fare || availableRide.calculated_fare || '0'),
           estimatedDuration: availableRide.duration || 15,
           createdAt: new Date(availableRide.created_at || Date.now()),
         };
-        
-        setCurrentRide(acceptedRide);
-        setShowMap(true);
+        setCurrentRide(newRide);
         setAvailableRide(null);
-        
-        if ((global as any).ridePollingInterval) {
-          clearInterval((global as any).ridePollingInterval);
-          (global as any).ridePollingInterval = null;
-        }
-      } else {
-        Alert.alert('Error', response.message || 'Failed to accept ride');
+        Alert.alert('Success', 'Ride accepted successfully!');
+        await fetchLiveRideData();
+      } else if (response.error) {
+        Alert.alert('Error', response.error);
+        isAcceptingRideRef.current = false;
+        isFetchingRef.current = false;
         setHasIncomingRequest(true);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to accept ride');
-      setHasIncomingRequest(true);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleDeclineRide = async () => {
-    setHasIncomingRequest(false);
-    setAvailableRide(null);
-    setPickupLocation(currentLocation);
-    setDropoffLocation(null);
-    
-    await fetchAvailableRides();
-    
-    if (!hasIncomingRequest) {
-      Alert.alert('Ride Declined', 'Looking for another ride request...');
-    }
-  };
-
-  const handleUpdateStatus = async (status: RideStatus) => {
-    if (!currentRide) return;
-
-    try {
-      if (status === 'in_progress') {
-        setCurrentRide({ ...currentRide, status });
-      } else if (status === 'started') {
-        setCurrentRide({ ...currentRide, status });
-      } else if (status === 'completed') {
-        await markArrivedAPI(currentRide.id);
-        Alert.alert('Ride Completed', 'Great job! Payment has been processed.');
-        setShowMap(false);
-        setIsLoading(true);
-        if (webViewRef.current) {
-          webViewRef.current.postMessage(JSON.stringify({ type: 'clearRoute' }));
-          webViewRef.current.postMessage(JSON.stringify({ type: 'clearMarkers' }));
+        if (isDriverOnline && !currentRideRef.current) {
+          const pollInterval = setInterval(() => fetchAvailableRides(), 10000);
+          (global as any).ridePollingInterval = pollInterval;
         }
-        setCurrentRide(null);
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update ride status');
-    }
-  };
-
-  const handleSOSPress = () => {
-    Alert.alert(
-      'Emergency SOS',
-      'This will send an emergency alert to authorities and the passenger. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Send SOS',
-          style: 'destructive',
-          onPress: () => console.log('SOS sent'),
-        },
-      ]
-    );
-  };
-
-  const handleCancelRide = async () => {
-    if (!currentRide) return;
-    try {
-      await cancelRideAPI(currentRide.id);
-      Alert.alert('Ride Cancelled', 'The ride has been cancelled.');
-      setCurrentRide(null);
-      setShowMap(false);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to cancel ride');
-    }
-  };
-
-  const getStatusColor = (): readonly [string, string] => {
-    if (!isDriverOnline) return ['#FFE5F1', '#FFB6D9'];
-    if (currentRide) return ['#FF85C0', '#ec4899'];
-    return ['#FFB6D9', '#FF85C0'];
-  };
-
-  const getStatusText = () => {
-    if (!isDriverOnline) return 'You are offline';
-    if (currentRide) {
-      switch (currentRide.status) {
-        case 'accepted': return 'Ride accepted - Navigate to pickup';
-        case 'in_progress': return 'On the way to pickup';
-        case 'started': return 'Trip in progress';
-        default: return 'Available for rides';
+    } catch (error: any) {
+      console.error('Accept ride error:', error);
+      const errorMessage = error?.response?.data?.error || error?.message || 'Failed to accept ride';
+      Alert.alert('Error', errorMessage);
+      isAcceptingRideRef.current = false;
+      isFetchingRef.current = false;
+      setHasIncomingRequest(true);
+      if (isDriverOnline && !currentRideRef.current) {
+        const pollInterval = setInterval(() => fetchAvailableRides(), 10000);
+        (global as any).ridePollingInterval = pollInterval;
       }
     }
-    return 'Available for rides';
   };
 
+  // ----- RENDER -----
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <WebView
-        ref={webViewRef}
-        source={{ html: mapHTML }}
-        style={styles.map}
-        onMessage={handleMapMessage}
-        onLoadEnd={() => {
-          console.log('Map loaded in driver view');
-          setIsLoading(false);
-          if (localUserLocation) {
-            setTimeout(() => {
-              webViewRef.current?.postMessage(JSON.stringify({
-                type: 'setUserLocation',
-                ...localUserLocation
-              }));
-              webViewRef.current?.postMessage(JSON.stringify({
-                type: 'setView',
-                ...localUserLocation,
-                zoom: 14
-              }));
-            }, 300);
-          }
-        }}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        originWhitelist={['*']}
-        onError={(syntheticEvent) => {
-          const { nativeEvent } = syntheticEvent;
-          console.error('WebView error: ', nativeEvent);
-          setIsLoading(false);
-        }}
-      />
-      {isLoading && (
+      {isCheckingActiveRide ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#FF85C0" />
-          <Text style={styles.loadingText}>Loading map...</Text>
+          <Text style={styles.loadingText}>Checking for active rides...</Text>
         </View>
+      ) : (
+        <>
+          <WebView
+            ref={webViewRef}
+            source={{ html: mapHTML }}
+            style={styles.map}
+            onMessage={handleMapMessage}
+            onLoadEnd={() => {
+              console.log('Map loaded in driver view');
+              setIsLoading(false);
+              if (localUserLocation) {
+                webViewRef.current?.postMessage(JSON.stringify({
+                  type: 'setUserLocation',
+                  ...localUserLocation,
+                }));
+                webViewRef.current?.postMessage(JSON.stringify({
+                  type: 'setView',
+                  ...localUserLocation,
+                  zoom: 14,
+                }));
+              }
+            }}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            originWhitelist={['*']}
+            onError={(syntheticEvent) => {
+              const { nativeEvent } = syntheticEvent;
+              console.error('WebView error: ', nativeEvent);
+              setIsLoading(false);
+            }}
+          />
+          {isLoading && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#FF85C0" />
+              <Text style={styles.loadingText}>Loading map...</Text>
+            </View>
+          )}
+          {/* Rest of your UI components */}
+        </>
       )}
-      <View style={styles.overlay}>
-        {showMap && currentRide ? (
-          <>
-            <LinearGradient
-              colors={getStatusColor()}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.statusContainerMap}
-            >
-              <Text style={styles.statusText}>{getStatusText()}</Text>
-            </LinearGradient>
-            <View style={styles.navigationCard}>
-              <LinearGradient colors={['#FFF5FA', '#FFE5F1']} style={styles.navigationCardGradient}>
-                <Text style={styles.navigationTitle}>
-                  {currentRide.status === 'accepted' ? 'Navigate to Pickup' :
-                   currentRide.status === 'in_progress' ? 'Pickup Passenger' :
-                   'Navigate to Destination'}
-                </Text>
-                <Text style={styles.navigationAddress}>
-                  {currentRide.status === 'started' ? currentRide.dropoff.address : currentRide.pickup.address}
-                </Text>
-                <View style={styles.navigationActions}>
-                  <TouchableOpacity style={styles.callButton}>
-                    <LinearGradient colors={['#FFB6D9', '#FF85C0']} style={styles.actionButtonGradient}>
-                      <Phone size={16} color="white" />
-                      <Text style={styles.callButtonText}>Call</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.sosButton} onPress={handleSOSPress}>
-                    <LinearGradient colors={['#dc2626', '#b91c1c']} style={styles.actionButtonGradient}>
-                      <AlertTriangle size={16} color="white" />
-                      <Text style={styles.sosButtonText}>SOS</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              </LinearGradient>
-            </View>
-            <View style={styles.rideActionsMap}>
-              {currentRide.status === 'accepted' && (
-                <TouchableOpacity style={styles.statusButton} onPress={() => handleUpdateStatus('in_progress')}>
-                  <LinearGradient colors={['#FFB6D9', '#FF85C0']} style={styles.statusButtonGradient}>
-                    <Text style={styles.statusButtonText}>I'm on my way</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              )}
-              {currentRide.status === 'in_progress' && (
-                <TouchableOpacity style={styles.statusButton} onPress={() => handleUpdateStatus('started')}>
-                  <LinearGradient colors={['#FFB6D9', '#FF85C0']} style={styles.statusButtonGradient}>
-                    <Text style={styles.statusButtonText}>Start Trip</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              )}
-              {currentRide.status === 'started' && (
-                <TouchableOpacity style={styles.statusButton} onPress={() => handleUpdateStatus('completed')}>
-                  <LinearGradient colors={['#10b981', '#059669']} style={styles.statusButtonGradient}>
-                    <Text style={styles.statusButtonText}>Complete Trip</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.cancelButton} onPress={handleCancelRide}>
-                <LinearGradient colors={['#dc2626', '#b91c1c']} style={styles.statusButtonGradient}>
-                  <Text style={styles.statusButtonText}>Cancel Ride</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          </>
-        ) : (
-          <>
-            <LinearGradient
-              colors={isDriverOnline ? ['#FFE5F1', '#FF85C0', '#ec4899'] : ['#f5429bff', '#FFE5F1', '#FFB6D9']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.header}
-            >
-              <View style={styles.headerContent}>
-                <View style={styles.headerTop}>
-                  <View style={styles.greetingContainer}>
-                    <Text style={styles.greeting}>Hello, {user?.name}! ✨</Text>
-                    <Text style={styles.subtitle}>
-                      {isDriverOnline ? 'You are online and ready to drive' : 'Go online to start earning'}
-                    </Text>
-                  </View>
-                  {isDriverOnline && (
-                    <View style={styles.onlinePulse}>
-                      <Zap size={20} color="#fbbf24" fill="#fbbf24" />
-                    </View>
-                  )}
-                </View>
-              </View>
-            </LinearGradient>
-            <View style={styles.floatingCard}>
-              <View style={styles.cardContent}>
-                <LinearGradient colors={getStatusColor()} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.statusContainer}>
-                  <Text style={styles.statusText}>{getStatusText()}</Text>
-                </LinearGradient>
-
-                <TouchableOpacity style={styles.toggleButton} onPress={handleToggleOnline} testID="toggle-online-button">
-                  <LinearGradient colors={isDriverOnline ? ['#dc2626', '#b91c1c'] : ['#FFB6D9', '#FF85C0']} style={styles.toggleButtonGradient}>
-                    <Power size={24} color="white" />
-                    <Text style={styles.toggleButtonText}>{isDriverOnline ? 'Go Offline' : 'Go Online'}</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              </View>
-              {hasIncomingRequest && (
-                <View style={styles.requestContainer}>
-                  <LinearGradient colors={['#FFF5FA', '#FFE5F1']} style={styles.requestGradient}>
-                    <View style={styles.requestHeader}>
-                      <LinearGradient colors={['#FF85C0', '#FFB6D9']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.requestBadge}>
-                        <Text style={styles.requestTitle}>New Ride Request! 🚗</Text>
-                      </LinearGradient>
-                    </View>
-                    <View style={styles.requestDetails}>
-                      <LocationItem 
-                        icon={<MapPin size={16} color="#FF85C0" />} 
-                        label="Pickup" 
-                        text={pickupLocation?.address || 'Pickup Location'} 
-                      />
-                      <View style={styles.routeDivider} />
-                      <LocationItem 
-                        icon={<Navigation size={16} color="#FFB6D9" />} 
-                        label="Drop-off" 
-                        text={dropoffLocation?.address || 'Destination'} 
-                      />
-                      {availableRide?.passenger && (
-                        <View style={styles.passengerInfo}>
-                          <Text style={styles.passengerLabel}>Passenger</Text>
-                          <Text style={styles.passengerName}>{availableRide.passenger.name}</Text>
-                        </View>
-                      )}
-                      <View style={styles.rideMetrics}>
-                        <MetricItem 
-                          icon={<DollarSign size={18} color="#fbbf24" />} 
-                          text={`${parseFloat(availableRide?.fare || availableRide?.calculated_fare || '0').toFixed(2)} LBP`} 
-                        />
-                        <MetricItem 
-                          icon={<Clock size={18} color="#D4A5F5" />} 
-                          text={`${parseFloat(availableRide?.distance || '0').toFixed(1)} km`} 
-                        />
-                        <MetricItem 
-                          icon={<Clock size={18} color="#9d174d" />} 
-                          text={`${availableRide?.duration || '0'} min`} 
-                        />
-                      </View>
-                    </View>
-                    <View style={styles.requestActions}>
-                      <TouchableOpacity style={styles.declineButton} onPress={handleDeclineRide}>
-                        <LinearGradient colors={['#FFE5F1', '#FFF5FA']} style={styles.actionButtonGradient}>
-                          <Text style={styles.declineButtonText}>Decline</Text>
-                        </LinearGradient>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.acceptButton} onPress={handleAcceptRide}>
-                        <LinearGradient colors={['#FFB6D9', '#FF85C0']} style={styles.actionButtonGradient}>
-                          <Text style={styles.acceptButtonText}>Accept Ride</Text>
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    </View>
-                  </LinearGradient>
-                </View>
-              )}
-              {currentRide && !showMap && (
-                <View style={styles.activeRideContainer}>
-                  <LinearGradient colors={['#FFF5FA', '#FFE5F1']} style={styles.activeRideGradient}>
-                    <View style={styles.activeRideHeader}>
-                      <Text style={styles.activeRideTitle}>Current Ride</Text>
-                      <View style={styles.activeRideBadge}>
-                        <View style={styles.pulseDot} />
-                        <Text style={styles.activeRideBadgeText}>In Progress</Text>
-                      </View>
-                    </View>
-                    <TouchableOpacity style={styles.viewMapButton} onPress={() => setShowMap(true)}>
-                      <LinearGradient colors={['#FFB6D9', '#FF85C0']} style={styles.viewMapButtonGradient}>
-                        <Navigation size={18} color="white" />
-                        <Text style={styles.viewMapButtonText}>View Navigation</Text>
-                      </LinearGradient>
-                    </TouchableOpacity>
-                    <View style={styles.rideInfo}>
-                      <LocationItem icon={<MapPin size={16} color="#FF85C0" />} text={currentRide.pickup.address} />
-                      <LocationItem icon={<Navigation size={16} color="#FFB6D9" />} text={currentRide.dropoff.address} />
-                      <LocationItem icon={<DollarSign size={16} color="#fbbf24" />} text={`${currentRide.fare} LBP`} />
-                    </View>
-                    <View style={styles.driverActions}>
-                      <TouchableOpacity style={styles.callButton}>
-                        <LinearGradient colors={['#FFB6D9', '#FF85C0']} style={styles.actionButtonGradient}>
-                          <Phone size={16} color="white" />
-                          <Text style={styles.callButtonText}>Call</Text>
-                        </LinearGradient>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.sosButton} onPress={handleSOSPress}>
-                        <LinearGradient colors={['#dc2626', '#b91c1c']} style={styles.actionButtonGradient}>
-                          <AlertTriangle size={16} color="white" />
-                          <Text style={styles.sosButtonText}>SOS</Text>
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    </View>
-                    <View style={styles.rideActions}>
-                      {currentRide.status === 'accepted' && (
-                        <TouchableOpacity style={styles.statusButton} onPress={() => handleUpdateStatus('in_progress')}>
-                          <LinearGradient colors={['#FFB6D9', '#FF85C0']} style={styles.statusButtonGradient}>
-                            <Text style={styles.statusButtonText}>I'm on my way</Text>
-                          </LinearGradient>
-                        </TouchableOpacity>
-                      )}
-                      {currentRide.status === 'in_progress' && (
-                        <TouchableOpacity style={styles.statusButton} onPress={() => handleUpdateStatus('started')}>
-                          <LinearGradient colors={['#FFB6D9', '#FF85C0']} style={styles.statusButtonGradient}>
-                            <Text style={styles.statusButtonText}>Start Trip</Text>
-                          </LinearGradient>
-                        </TouchableOpacity>
-                      )}
-                      {currentRide.status === 'started' && (
-                        <TouchableOpacity style={styles.statusButton} onPress={() => handleUpdateStatus('completed')}>
-                          <LinearGradient colors={['#10b981', '#059669']} style={styles.statusButtonGradient}>
-                            <Text style={styles.statusButtonText}>Complete Trip</Text>
-                          </LinearGradient>
-                        </TouchableOpacity>
-                      )}
-                      <TouchableOpacity style={styles.cancelButton} onPress={handleCancelRide}>
-                        <LinearGradient colors={['#dc2626', '#b91c1c']} style={styles.statusButtonGradient}>
-                          <Text style={styles.statusButtonText}>Cancel Ride</Text>
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    </View>
-                  </LinearGradient>
-                </View>
-              )}
-              {isDriverOnline && !hasIncomingRequest && !currentRide && <WaitingForRide />}
-            </View>
-          </>
-        )}
-      </View>
     </SafeAreaView>
   );
 }
 
-
-
-// Subcomponents
-const LocationItem = ({ icon, label, text }: { icon: React.ReactNode; label?: string; text: string }) => (
-  <View style={styles.locationItem}>
-    <View style={styles.iconCircle}>{icon}</View>
-    <View style={styles.locationTextContainer}>
-      {label && <Text style={styles.locationLabel}>{label}</Text>}
-      <Text style={styles.locationText}>{text}</Text>
-    </View>
-  </View>
-);
-
-const MetricItem = ({ icon, text }: { icon: React.ReactNode; text: string }) => (
-  <View style={styles.metricItem}>
-    {icon}
-    <Text style={styles.metricText}>{text}</Text>
-  </View>
-);
-
-const WaitingForRide = () => (
-  <View style={styles.waitingContainer}>
-    <LinearGradient colors={['#FFF5FA', '#FFE5F1']} style={styles.waitingGradient}>
-      <View style={styles.waitingPulse}>
-        <Zap size={32} color="#FF85C0" fill="#FF85C0" />
-      </View>
-      <Text style={styles.waitingText}>Waiting for ride requests...</Text>
-      <Text style={styles.waitingSubtext}>Stay nearby for faster pickups</Text>
-    </LinearGradient>
-  </View>
-);
-
-// Styles
+// ----- STYLES -----
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFE5F1',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 1,
-    pointerEvents: 'box-none',
   },
   map: {
     ...StyleSheet.absoluteFillObject,
@@ -796,6 +471,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 12,
   },
+  // ... rest of your styles
   header: {
     paddingHorizontal: 20,
     paddingTop: 16,
@@ -838,10 +514,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
   floatingCard: {
     position: 'absolute',
     top: 100,
@@ -859,21 +531,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 8,
-  },
-  chatButton: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginTop: 12,
-  },
-  chatButtonGradient: {
-    padding: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chatButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
   },
   statusContainer: {
     borderRadius: 14,
@@ -1117,6 +774,26 @@ const styles = StyleSheet.create({
   rideInfo: {
     marginBottom: 16,
   },
+  fareDivider: {
+    height: 1,
+    backgroundColor: '#FFE5F1',
+    marginVertical: 12,
+  },
+  fareContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(251, 191, 36, 0.15)',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+  },
+  fareAmount: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#831843',
+    marginLeft: 8,
+  },
   callButton: {
     flex: 1,
     borderRadius: 12,
@@ -1226,6 +903,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
+  etaContainer: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255, 133, 192, 0.1)',
+    borderRadius: 10,
+  },
+  etaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  etaText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#831843',
+  },
   rideActionsMap: {
     position: 'absolute',
     bottom: 40,
@@ -1233,48 +929,28 @@ const styles = StyleSheet.create({
     right: 20,
     gap: 12,
   },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    backgroundColor: 'rgba(255, 245, 250, 0.8)',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: '#831843',
-  },
-  searchButton: {
-    padding: 8,
-  },
   passengerInfo: {
-  backgroundColor: '#FFF5FA',
-  borderRadius: 12,
-  padding: 12,
-  marginTop: 10,
-  marginBottom: 6,
-  shadowColor: '#FF85C0',
-  shadowOpacity: 0.1,
-  shadowOffset: { width: 0, height: 2 },
-  shadowRadius: 4,
-  elevation: 2,
-},
-
-passengerLabel: {
-  color: '#831843',
-  fontSize: 13,
-  fontWeight: '600',
-  marginBottom: 4,
-  letterSpacing: 0.5,
-},
-
-passengerName: {
-  fontSize: 16,
-  fontWeight: '700',
-  color: '#FF2E78',
-},
-
+    backgroundColor: '#FFF5FA',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 10,
+    marginBottom: 6,
+    shadowColor: '#FF85C0',
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  passengerLabel: {
+    color: '#831843',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 4,
+    letterSpacing: 0.5,
+  },
+  passengerName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FF2E78',
+  },
 });

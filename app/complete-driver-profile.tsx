@@ -79,7 +79,7 @@ const [items, setItems] = useState([
       if (carPhoto) {
         const uriParts = carPhoto.split('.');
         const fileType = uriParts[uriParts.length - 1];
-        formData.append('car_photo_front', {
+        formData.append('car_photo', {
           uri: carPhoto,
           name: `car_photo.${fileType}`,
           type: `image/${fileType}`,

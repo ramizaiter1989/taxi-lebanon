@@ -2,7 +2,7 @@ import React from 'react';
 import {
   StyleSheet,
   View,
-  Text,
+  Text,Alert,
   TouchableOpacity,
   ScrollView,
   Image,
@@ -56,10 +56,22 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { user, logout } = useUser();
 
-  const handleLogout = () => {
-    logout();
-    router.replace('/login');
-  };
+    const handleLogout = () => {
+      const confirmlogout=  () =>
+      {
+        logout();
+      router.replace('/login');}
+  
+      Alert.alert(
+            'Logout',
+            'Are you sure you want to logout?',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Logout', onPress: confirmlogout }
+            ]
+          );
+      
+    };
 
   const renderSettingsItem = (item: SettingsItem) => (
     <TouchableOpacity
@@ -98,7 +110,7 @@ export default function SettingsScreen() {
             </View>
             <View style={styles.profileInfo}>
               <Text style={styles.profileName}>{user?.name || 'User'}</Text>
-              <Text style={styles.profileEmail}>{user?.email || 'email@example.com'}</Text>
+              <Text style={styles.profileEmail}>{user?.email || 'email@examples.com'}</Text>
             </View>
             <ChevronRight size={24} color="white" />
           </LinearGradient>

@@ -63,6 +63,7 @@
     "firebase": "^12.4.0",
     "framer-motion": "^12.23.24",
     "glob": "^11.0.3",
+    "haversine-distance": "^1.2.4",
     "laravel-echo": "^2.2.4",
     "lru-cache": "^11.2.2",
     "lucide-react": "^0.545.0",

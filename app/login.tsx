@@ -24,6 +24,7 @@ import Animated, {
 import { useRouter } from 'expo-router';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { normalizePhone } from '@/utils/phone';
 
 const { width, height } = Dimensions.get('window');
 const API_URL = `${API_BASE_URL}/login`;
@@ -31,6 +32,8 @@ const API_URL = `${API_BASE_URL}/login`;
 interface LoginResponse {
   token: string;
   user: {
+    phone: string;
+    is_verified: any;
     id: number;
     name: string;
     email: string;
@@ -66,7 +69,11 @@ export default function LoginScreen() {
       if (rememberMe) {
         await AsyncStorage.setItem('savedEmail', email);
       }
-
+if (!user.is_verified && user.phone) {
+      const normalizedPhone = normalizePhone(user.phone);
+      router.replace(`/verify-otp?phone=${normalizedPhone}&role=${user.role}`);
+      return; // stop further navigation
+    }
       Alert.alert('Success', `Welcome back, ${user.name}! 🎉`);
 
       if (user.role === 'passenger') {
