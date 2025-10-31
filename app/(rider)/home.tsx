@@ -195,10 +195,14 @@ export default function RiderHomeScreen() {
     const response = await fetch(`${API_BASE_URL}/rides/${rideId}/cancel`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        
+    body: JSON.stringify({
+      reason: 'changed_mind',  // choose one of your backend's allowed reasons
+      note: 'User cancelled from app' // optional
+    }),
     });
-    
     const data = await response.json();
-    
+
     if (!response.ok) {
       // Throw error with backend message
       throw new Error(data.error || 'Failed to cancel ride');
@@ -231,16 +235,18 @@ export default function RiderHomeScreen() {
         const { origin, destination, driver, route_info } = result.data;
         
         // Clear existing markers and route
-        webViewRef.current.postMessage(JSON.stringify({ type: 'clearRoute' }));
+        // webViewRef.current.postMessage(JSON.stringify({ type: 'clearRoute' }));
         webViewRef.current.postMessage(JSON.stringify({ type: 'clearMarkers' }));
         
         setTimeout(async () => {
           // Add driver current location marker
+         
+
           if (driver?.current_location) {
             webViewRef.current?.postMessage(JSON.stringify({ 
               type: 'setUserLocation',
               lat: driver.current_location.lat,
-              lng: driver.current_location.lng
+              lng: driver.current_location.lng,
             }));
           }
           
@@ -265,27 +271,33 @@ export default function RiderHomeScreen() {
           // Draw route based on current phase using OSRM
           try {
             let routeResponse;
-            
-            if (route_info.phase === 'to_pickup' && driver?.current_location) {
-              // Show route from driver to pickup
-              console.log('🛣️ Drawing route: Driver → Pickup');
-              routeResponse = await fetch(
-                `https://router.project-osrm.org/route/v1/driving/${driver.current_location.lng},${driver.current_location.lat};${origin.lng},${origin.lat}?overview=full&geometries=geojson`
-              );
-            } else if (route_info.phase === 'in_trip') {
-              // Show route from pickup to destination
-              console.log('🛣️ Drawing route: Pickup → Destination');
-              routeResponse = await fetch(
-                `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`
-              );
-            }
+
+// Check if driver is far from pickup
+const isDriverNearPickup = driver?.current_location && origin
+  ? Math.hypot(driver.current_location.lat - origin.lat, driver.current_location.lng - origin.lng) < 0.0005
+  : false;
+
+if (driver?.current_location && !isDriverNearPickup) {
+  // Draw driver → pickup route
+  console.log('🛣️ Drawing route: Driver → Pickup');
+  routeResponse = await fetch(
+    `https://router.project-osrm.org/route/v1/driving/${driver.current_location.lng},${driver.current_location.lat};${origin.lng},${origin.lat}?overview=full&geometries=geojson`
+  );
+} else if (origin && destination) {
+  // Draw pickup → destination route
+  console.log('🛣️ Drawing route: Pickup → Destination');
+  routeResponse = await fetch(
+    `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`
+  );
+}
+
             
             if (routeResponse && routeResponse.ok) {
               const routeData = await routeResponse.json();
               
               if (routeData.routes && routeData.routes.length > 0) {
                 const route = routeData.routes[0];
-                const color = route_info.phase === 'to_pickup' ? '#FF85C0' : '#10b981';
+                const color = route_info.phase === 'to_pickup' ? '#ff0000ff' : '#05ff0dff';
                 
                 // Send route coordinates to map
                 webViewRef.current?.postMessage(JSON.stringify({
@@ -728,7 +740,7 @@ export default function RiderHomeScreen() {
           
           // Clear ride state
           setShowMap(false);
-          webViewRef.current?.postMessage(JSON.stringify({ type: 'clearRoute' }));
+          // webViewRef.current?.postMessage(JSON.stringify({ type: 'clearRoute' }));
           webViewRef.current?.postMessage(JSON.stringify({ type: 'clearMarkers' }));
           setCurrentRide(null);
           setLiveRideData(null);
@@ -774,6 +786,7 @@ export default function RiderHomeScreen() {
     
     try {
       await cancelRideAPI(currentRide.id);
+      
       Alert.alert('Ride Cancelled', 'The ride has been cancelled.');
       
       // Stop live ride polling
@@ -1195,9 +1208,9 @@ const MetricItem = ({ icon, text }: { icon: React.ReactNode; text: string }) => 
 
 const WaitingForRide = () => (
   <View style={styles.waitingContainer}>
-    <LinearGradient colors={['#FFF5FA', '#FFE5F1']} style={styles.waitingGradient}>
+    <LinearGradient colors={['#fff5fa98', '#ffe5f191']} style={styles.waitingGradient}>
       <View style={styles.waitingPulse}>
-        <Zap size={32} color="#FF85C0" fill="#FF85C0" />
+        <Zap size={32} color="#c74182ff" fill="#dd207bff" />
       </View>
       <Text style={styles.waitingText}>Waiting for ride requests...</Text>
       <Text style={styles.waitingSubtext}>Stay nearby for faster pickups</Text>

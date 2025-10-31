@@ -65,15 +65,29 @@ export default function LoginScreen() {
       const response = await axios.post<LoginResponse>(API_URL, { email, password });
       const { token, user, profile_completed } = response.data;
 
+      // ✅ CRITICAL: Save all user data to AsyncStorage
       await AsyncStorage.setItem('token', token);
+      await AsyncStorage.setItem('user_id', user.id.toString()); // Save user ID
+      await AsyncStorage.setItem('user_role', user.role); // Save user role
+      await AsyncStorage.setItem('user_name', user.name); // Save user name
+      await AsyncStorage.setItem('user_email', user.email || ''); // Save user email
+      
       if (rememberMe) {
         await AsyncStorage.setItem('savedEmail', email);
       }
-if (!user.is_verified && user.phone) {
-      const normalizedPhone = normalizePhone(user.phone);
-      router.replace(`/verify-otp?phone=${normalizedPhone}&role=${user.role}`);
-      return; // stop further navigation
-    }
+
+      console.log('✅ User data saved to AsyncStorage:', {
+        user_id: user.id,
+        user_role: user.role,
+        user_name: user.name,
+      });
+
+      if (!user.is_verified && user.phone) {
+        const normalizedPhone = normalizePhone(user.phone);
+        router.replace(`/verify-otp?phone=${normalizedPhone}&role=${user.role}`);
+        return; // stop further navigation
+      }
+
       Alert.alert('Success', `Welcome back, ${user.name}! 🎉`);
 
       if (user.role === 'passenger') {

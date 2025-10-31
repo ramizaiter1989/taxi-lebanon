@@ -14,10 +14,9 @@ const getAuthHeaders = async () => {
 };
 
 export const chatService = {
-  async getMessages() {
+  async getMessages(rideId: number) {
     try {
       const { headers } = await getAuthHeaders();
-      const rideId = 4; // Hardcoded rideId for testing
       const response = await axios.get(`${API_BASE_URL}/chat/${rideId}`, { headers });
       return response.data;
     } catch (error: any) {
@@ -26,10 +25,9 @@ export const chatService = {
     }
   },
 
-  async sendMessage(message: string) {
+  async sendMessage(rideId: number, message: string) {
     try {
       const { headers } = await getAuthHeaders();
-      const rideId = 4; // Hardcoded rideId for testing
       const payload = {
         ride_id: rideId,
         message,
@@ -48,7 +46,7 @@ export const chatService = {
     }
   },
 
-  async markAsRead(rideId: number = 4) {
+  async markAsRead(rideId: number) {
     try {
       const { headers } = await getAuthHeaders();
       const response = await axios.post(`${API_BASE_URL}/chat/${rideId}/mark-read`, {}, { headers });
@@ -60,7 +58,7 @@ export const chatService = {
     }
   },
 
-  async getRideDetails(rideId: number = 4) {
+  async getRideDetails(rideId: number) {
     try {
       const { headers } = await getAuthHeaders();
       const response = await axios.get(`${API_BASE_URL}/rides/${rideId}`, { headers });

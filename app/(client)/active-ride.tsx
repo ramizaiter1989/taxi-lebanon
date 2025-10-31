@@ -225,6 +225,40 @@ export default function ActiveRideScreen() {
       };
     }
   }, [showMap, ride?.driver?.id, fetchDriverLocation]);
+// cache the ride
+// Add this useEffect in ActiveRideScreen after other useEffects
+// This will save the ride ID whenever it changes
+
+useEffect(() => {
+  const saveRideIdToCache = async () => {
+    if (ride?.id) {
+      try {
+        await AsyncStorage.setItem('current_ride_id', ride.id.toString());
+        console.log('✓ Saved ride ID to cache:', ride.id);
+      } catch (error) {
+        console.error('Failed to save ride ID:', error);
+      }
+    }
+  };
+
+  saveRideIdToCache();
+}, [ride?.id]);
+
+// Optional: Clear ride ID when ride is completed/cancelled
+useEffect(() => {
+  const clearRideIdIfInactive = async () => {
+    if (ride && !ACTIVE_STATUSES.includes(ride.status)) {
+      try {
+        await AsyncStorage.removeItem('current_ride_id');
+        console.log('✓ Cleared ride ID from cache (ride inactive)');
+      } catch (error) {
+        console.error('Failed to clear ride ID:', error);
+      }
+    }
+  };
+
+  clearRideIdIfInactive();
+}, [ride?.status]);
 
   // Setup map route when map opens
   useEffect(() => {
@@ -316,6 +350,7 @@ export default function ActiveRideScreen() {
 
   const handleMessage = useCallback(() => {
     Alert.alert('Message Driver', 'Messaging feature coming soon!');
+    router.replace('/(client)/TestChat');
   }, []);
 
   const handleCancelRide = useCallback(() => {

@@ -59,6 +59,14 @@
           iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
         });
 
+        var driverIcon = L.icon({
+          iconUrl: '../assets/images/icon.png', // car icon
+          iconSize: [35, 35], // make it square
+          iconAnchor: [17, 35], // bottom-center of the icon
+          popupAnchor: [0, -30],
+        });
+
+
         map.on('click', function(e) {
           window.ReactNativeWebView.postMessage(JSON.stringify({
             type: 'mapClick',
@@ -128,6 +136,20 @@
                 }).addTo(map);
                 map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
                 break;
+case 'drawRoute':
+  if (routeLayer) map.removeLayer(routeLayer);
+  var coords = message.coordinates.map(function(c) {
+    return [c[1], c[0]];
+  });
+  routeLayer = L.polyline(coords, {
+    color: message.color || '#59ff00ff',
+    weight: 5,
+    opacity: 0.8
+  }).addTo(map);
+  map.fitBounds(routeLayer.getBounds(), { padding: [50,50] });
+  break;
+
+
               case 'clearRoute':
                 if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
                 if (routeStartMarker) { map.removeLayer(routeStartMarker); routeStartMarker = null; }
