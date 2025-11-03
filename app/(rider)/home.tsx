@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { WebView } from 'react-native-webview';
-import { Power, MapPin, Navigation, Clock, DollarSign, Phone, AlertTriangle, Zap } from 'lucide-react-native';
+import { Power, MapPin, Navigation, Clock, DollarSign, Phone, AlertTriangle, Zap, MessageSquare } from 'lucide-react-native';
 import { useRide } from '@/hooks/ride-store';
 import { useUser } from '@/hooks/user-store';
 import { useMap } from '@/providers/MapProvider';
@@ -65,7 +65,6 @@ export default function RiderHomeScreen() {
   const getAuthToken = async () => await AsyncStorage.getItem('token');
 
   const fetchAvailableRides = async () => {
-    // CRITICAL SAFEGUARDS: Multiple layers of protection
     if (currentRideRef.current) {
       console.log('🛑 Skipping fetch - ride already in progress:', currentRideRef.current.id);
       return;
@@ -81,7 +80,6 @@ export default function RiderHomeScreen() {
       return;
     }
     
-    // Mark that we're fetching
     isFetchingRef.current = true;
     
     try {
@@ -91,7 +89,6 @@ export default function RiderHomeScreen() {
         return;
       }
       
-      // Double-check before making the API call
       if (currentRideRef.current || isAcceptingRideRef.current) {
         console.log('🛑 Aborting fetch - state changed during setup');
         isFetchingRef.current = false;
@@ -110,7 +107,6 @@ export default function RiderHomeScreen() {
       
       const data = await response.json();
       
-      // Triple-check after API call completes
       if (currentRideRef.current || isAcceptingRideRef.current) {
         console.log('🛑 Discarding fetch results - state changed during fetch');
         isFetchingRef.current = false;
@@ -155,7 +151,6 @@ export default function RiderHomeScreen() {
     const data = await response.json();
     
     if (!response.ok) {
-      // Throw error with backend message
       throw new Error(data.error || 'Failed to accept ride');
     }
     
@@ -171,45 +166,54 @@ export default function RiderHomeScreen() {
     if (!response.ok) throw new Error('Failed to mark arrived');
     return response.json();
   };
+
   const completeRideAPI = async (rideId: string) => {
-  const token = await getAuthToken();
-  const response = await fetch(`${API_BASE_URL}/rides/${rideId}/complete`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/json',  // ensures Laravel returns JSON
-      'Content-Type': 'application/json'
-    },
-  });
+    const token = await getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/rides/${rideId}/complete`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+    });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || 'Failed to complete ride');
-  }
-  return response.json();
-};
-
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to complete ride');
+    }
+    return response.json();
+  };
 
   const cancelRideAPI = async (rideId: string) => {
     const token = await getAuthToken();
     const response = await fetch(`${API_BASE_URL}/rides/${rideId}/cancel`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        
-    body: JSON.stringify({
-      reason: 'changed_mind',  // choose one of your backend's allowed reasons
-      note: 'User cancelled from app' // optional
-    }),
+      body: JSON.stringify({
+        reason: 'changed_mind',
+        note: 'User cancelled from app'
+      }),
     });
     const data = await response.json();
 
     if (!response.ok) {
-      // Throw error with backend message
       throw new Error(data.error || 'Failed to cancel ride');
     }
     
     return data;
   };
+
+  // ----- RIDE ACTION HANDLERS -----
+  const handleMessage = useCallback(() => {
+    if (!currentRide) {
+      Alert.alert('Error', 'No active ride to chat about');
+      return;
+    }
+    
+    // Navigate to chat with the current ride ID
+    router.push(`/(rider)/TestChat?rideId=${currentRide.id}`);
+  }, [currentRide, router]);
 
   const fetchLiveRideData = async () => {
     try {
@@ -230,18 +234,12 @@ export default function RiderHomeScreen() {
       console.log('📍 Live ride data received:', result.data?.route_info?.phase);
       setLiveRideData(result.data);
       
-      // Update map with live route data
       if (result.data && webViewRef.current && showMap) {
         const { origin, destination, driver, route_info } = result.data;
         
-        // Clear existing markers and route
-        // webViewRef.current.postMessage(JSON.stringify({ type: 'clearRoute' }));
         webViewRef.current.postMessage(JSON.stringify({ type: 'clearMarkers' }));
         
         setTimeout(async () => {
-          // Add driver current location marker
-         
-
           if (driver?.current_location) {
             webViewRef.current?.postMessage(JSON.stringify({ 
               type: 'setUserLocation',
@@ -250,7 +248,6 @@ export default function RiderHomeScreen() {
             }));
           }
           
-          // Add pickup marker
           webViewRef.current?.postMessage(JSON.stringify({ 
             type: 'addRouteMarker', 
             lat: origin.lat, 
@@ -259,7 +256,6 @@ export default function RiderHomeScreen() {
             title: origin.address || 'Pickup'
           }));
           
-          // Add destination marker
           webViewRef.current?.postMessage(JSON.stringify({ 
             type: 'addRouteMarker', 
             lat: destination.lat, 
@@ -268,29 +264,24 @@ export default function RiderHomeScreen() {
             title: destination.address || 'Destination'
           }));
           
-          // Draw route based on current phase using OSRM
           try {
             let routeResponse;
 
-// Check if driver is far from pickup
-const isDriverNearPickup = driver?.current_location && origin
-  ? Math.hypot(driver.current_location.lat - origin.lat, driver.current_location.lng - origin.lng) < 0.0005
-  : false;
+            const isDriverNearPickup = driver?.current_location && origin
+              ? Math.hypot(driver.current_location.lat - origin.lat, driver.current_location.lng - origin.lng) < 0.0005
+              : false;
 
-if (driver?.current_location && !isDriverNearPickup) {
-  // Draw driver → pickup route
-  console.log('🛣️ Drawing route: Driver → Pickup');
-  routeResponse = await fetch(
-    `https://router.project-osrm.org/route/v1/driving/${driver.current_location.lng},${driver.current_location.lat};${origin.lng},${origin.lat}?overview=full&geometries=geojson`
-  );
-} else if (origin && destination) {
-  // Draw pickup → destination route
-  console.log('🛣️ Drawing route: Pickup → Destination');
-  routeResponse = await fetch(
-    `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`
-  );
-}
-
+            if (driver?.current_location && !isDriverNearPickup) {
+              console.log('🛣️ Drawing route: Driver → Pickup');
+              routeResponse = await fetch(
+                `https://router.project-osrm.org/route/v1/driving/${driver.current_location.lng},${driver.current_location.lat};${origin.lng},${origin.lat}?overview=full&geometries=geojson`
+              );
+            } else if (origin && destination) {
+              console.log('🛣️ Drawing route: Pickup → Destination');
+              routeResponse = await fetch(
+                `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`
+              );
+            }
             
             if (routeResponse && routeResponse.ok) {
               const routeData = await routeResponse.json();
@@ -299,7 +290,6 @@ if (driver?.current_location && !isDriverNearPickup) {
                 const route = routeData.routes[0];
                 const color = route_info.phase === 'to_pickup' ? '#ff0000ff' : '#05ff0dff';
                 
-                // Send route coordinates to map
                 webViewRef.current?.postMessage(JSON.stringify({
                   type: 'drawRoute',
                   coordinates: route.geometry.coordinates,
@@ -311,7 +301,6 @@ if (driver?.current_location && !isDriverNearPickup) {
             }
           } catch (error) {
             console.error('Error drawing route:', error);
-            // Fallback to simple line route
             if (route_info.phase === 'to_pickup' && driver?.current_location) {
               webViewRef.current?.postMessage(JSON.stringify({
                 type: 'showRoute',
@@ -342,7 +331,6 @@ if (driver?.current_location && !isDriverNearPickup) {
     const checkActiveRide = async () => {
       setIsCheckingActiveRide(true);
       
-      // STOP any existing polling FIRST
       if ((global as any).ridePollingInterval) {
         clearInterval((global as any).ridePollingInterval);
         (global as any).ridePollingInterval = null;
@@ -352,10 +340,12 @@ if (driver?.current_location && !isDriverNearPickup) {
       const liveData = await fetchLiveRideData();
       
       if (liveData && liveData.status !== 'completed' && liveData.status !== 'cancelled') {
-        // Driver has an active ride
         console.log('✅ Active ride found on mount:', liveData.id);
         
-        // Set flags to prevent new ride acceptance
+        // CRITICAL: Store the ride ID in AsyncStorage
+        await AsyncStorage.setItem('current_ride_id', String(liveData.id));
+        console.log('💾 Restored and stored current_ride_id:', liveData.id);
+        
         isAcceptingRideRef.current = true;
         isFetchingRef.current = true;
         
@@ -385,7 +375,6 @@ if (driver?.current_location && !isDriverNearPickup) {
         setCurrentRide(restoredRide);
         setLiveRideData(liveData);
       } else {
-        // No active ride - reset flags and start polling if online
         console.log('ℹ️ No active ride found');
         isAcceptingRideRef.current = false;
         isFetchingRef.current = false;
@@ -409,10 +398,8 @@ if (driver?.current_location && !isDriverNearPickup) {
     if (currentRide && webViewRef.current && showMap) {
       console.log('🗺️ Setting up route for ride:', currentRide.id);
       
-      // Start fetching live ride data
       fetchLiveRideData();
       
-      // Poll live ride data every 5 seconds
       if (liveRideIntervalRef.current) {
         clearInterval(liveRideIntervalRef.current);
       }
@@ -496,7 +483,6 @@ if (driver?.current_location && !isDriverNearPickup) {
         };
       };
 
-      // Every 4 seconds: broadcast location (real-time)
       streamInterval = setInterval(async () => {
         try {
           const pos = await getCurrentPosition();
@@ -511,7 +497,6 @@ if (driver?.current_location && !isDriverNearPickup) {
         }
       }, 4000);
 
-      // Every 60 seconds: save to DB
       saveInterval = setInterval(async () => {
         try {
           const pos = await getCurrentPosition();
@@ -527,12 +512,10 @@ if (driver?.current_location && !isDriverNearPickup) {
       }, 60000);
     };
 
-    // Start intervals when driver is online
     if (isDriverOnline) {
       startLocationUpdates();
     }
 
-    // Cleanup when going offline or unmounting
     return () => {
       if (streamInterval) clearInterval(streamInterval);
       if (saveInterval) clearInterval(saveInterval);
@@ -566,7 +549,6 @@ if (driver?.current_location && !isDriverNearPickup) {
   };
 
   const handleToggleOnline = async () => {
-    // Prevent going online if there's an active ride
     if (currentRide) {
       Alert.alert(
         'Active Ride in Progress',
@@ -579,13 +561,11 @@ if (driver?.current_location && !isDriverNearPickup) {
     toggleDriverOnline();
     
     if (!isDriverOnline) {
-      // Going online - start polling
       await fetchAvailableRides();
       const pollInterval = setInterval(() => fetchAvailableRides(), 10000);
       (global as any).ridePollingInterval = pollInterval;
       console.log('✅ Driver online - polling started');
     } else {
-      // Going offline - clear everything
       setHasIncomingRequest(false);
       setAvailableRide(null);
       
@@ -605,28 +585,23 @@ if (driver?.current_location && !isDriverNearPickup) {
     
     console.log('🎯 Attempting to accept ride:', availableRide.id);
     
-    // Prevent double-accept - CRITICAL: Check and set in single atomic operation
     if (isAcceptingRideRef.current || currentRideRef.current) {
       console.log('🛑 Already accepting or have active ride');
       return;
     }
     
-    // Set accepting flag IMMEDIATELY - THIS MUST BE FIRST
     isAcceptingRideRef.current = true;
     console.log('✅ isAcceptingRideRef set to true');
     
-    // STOP polling IMMEDIATELY
     if ((global as any).ridePollingInterval) {
       clearInterval((global as any).ridePollingInterval);
       (global as any).ridePollingInterval = null;
       console.log('✅ Polling stopped - accepting ride');
     }
     
-    // ALSO set isFetchingRef to prevent any in-flight fetches from processing
     isFetchingRef.current = true;
     console.log('✅ isFetchingRef set to true');
     
-    // Hide incoming request UI immediately
     setHasIncomingRequest(false);
     console.log('✅ Incoming request hidden');
     
@@ -635,8 +610,11 @@ if (driver?.current_location && !isDriverNearPickup) {
       const response = await acceptRideAPI(availableRide.id);
       console.log('📥 Response received:', response);
       
-      // Backend returns { message, ride, pickup_eta } on success
       if (response.message || response.ride) {
+        // CRITICAL: Store the ride ID in AsyncStorage for chat
+        await AsyncStorage.setItem('current_ride_id', String(availableRide.id));
+        console.log('💾 Stored current_ride_id:', availableRide.id);
+        
         const newRide = {
           id: String(availableRide.id),
           clientId: String(availableRide.passenger_id || availableRide.passenger?.id || '1'),
@@ -650,7 +628,6 @@ if (driver?.current_location && !isDriverNearPickup) {
         
         console.log('✅ Creating ride object:', newRide);
         
-        // Set ride state IMMEDIATELY - button will change instantly
         setCurrentRide(newRide);
         setAvailableRide(null);
         
@@ -658,20 +635,17 @@ if (driver?.current_location && !isDriverNearPickup) {
         console.log('✅ currentRide state updated');
         Alert.alert('Success', 'Ride accepted successfully!');
         
-        // Fetch live ride data in background
         console.log('📡 Fetching live ride data...');
         await fetchLiveRideData();
         console.log('✅ Live ride data fetched');
         
       } else if (response.error) {
-        // Backend returned an error
         console.log('❌ Backend error:', response.error);
         Alert.alert('Error', response.error);
         isAcceptingRideRef.current = false;
         isFetchingRef.current = false;
         setHasIncomingRequest(true);
         
-        // Restart polling if accept failed
         if (isDriverOnline && !currentRideRef.current) {
           const pollInterval = setInterval(() => fetchAvailableRides(), 10000);
           (global as any).ridePollingInterval = pollInterval;
@@ -681,7 +655,6 @@ if (driver?.current_location && !isDriverNearPickup) {
     } catch (error: any) {
       console.error('❌ Accept ride error:', error);
       
-      // Check if error response contains a message
       const errorMessage = error?.response?.data?.error || error?.message || 'Failed to accept ride';
       Alert.alert('Error', errorMessage);
       
@@ -689,7 +662,6 @@ if (driver?.current_location && !isDriverNearPickup) {
       isFetchingRef.current = false;
       setHasIncomingRequest(true);
       
-      // Restart polling on error
       if (isDriverOnline && !currentRideRef.current) {
         const pollInterval = setInterval(() => fetchAvailableRides(), 10000);
         (global as any).ridePollingInterval = pollInterval;
@@ -698,17 +670,72 @@ if (driver?.current_location && !isDriverNearPickup) {
     }
   };
 
-  const handleDeclineRide = async () => {
+  // Add this API helper function with your other API helpers (around line 80)
+
+const declineRideAPI = async (rideId: string) => {
+  const token = await getAuthToken();
+  const response = await fetch(`${API_BASE_URL}/rides/${rideId}/decline`, {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json', 
+      'Authorization': `Bearer ${token}` 
+    },
+  });
+  
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to decline ride');
+  }
+  
+  return data;
+};
+
+// Replace your existing handleDeclineRide function (around line 520)
+
+const handleDeclineRide = async () => {
+  if (!availableRide) {
+    console.log('⚠️ No available ride to decline');
+    return;
+  }
+  
+  console.log('🚫 Declining ride:', availableRide.id);
+  
+  try {
+    // Call the decline API endpoint
+    await declineRideAPI(availableRide.id);
+    console.log('✅ Ride declined successfully via API');
+    
+    // Clear the current ride request from UI
     setHasIncomingRequest(false);
     setAvailableRide(null);
     setPickupLocation(currentLocation);
     setDropoffLocation(null);
     
-    // Fetch next available ride immediately
+    // Immediately fetch next available ride if driver is online
+    if (isDriverOnline && !currentRide && !isAcceptingRideRef.current) {
+      console.log('🔄 Fetching next available ride after decline...');
+      await fetchAvailableRides();
+    }
+    
+  } catch (error: any) {
+    console.error('❌ Error declining ride:', error);
+    
+    // Show error to driver but still clear the UI
+    const errorMessage = error?.message || 'Failed to decline ride';
+    Alert.alert('Error', errorMessage);
+    
+    // Even on error, clear the UI and try to fetch next ride
+    setHasIncomingRequest(false);
+    setAvailableRide(null);
+    setPickupLocation(currentLocation);
+    setDropoffLocation(null);
+    
     if (isDriverOnline && !currentRide && !isAcceptingRideRef.current) {
       await fetchAvailableRides();
     }
-  };
+  }
+};
 
   const handleUpdateStatus = async (status: RideStatus) => {
     if (!currentRide) return;
@@ -716,42 +743,45 @@ if (driver?.current_location && !isDriverNearPickup) {
     try {
       switch (status) {
         case 'arrived':
+          // Ensure ride ID is in storage
+          await AsyncStorage.setItem('current_ride_id', currentRide.id);
+          
           await markArrivedAPI(currentRide.id);
           setCurrentRide({ ...currentRide, status: 'arrived' });
-          // Refresh live ride data to update route phase
           await fetchLiveRideData();
           break;
           
         case 'in_progress':
+          // Ensure ride ID is in storage
+          await AsyncStorage.setItem('current_ride_id', currentRide.id);
+          
           setCurrentRide({ ...currentRide, status: 'in_progress' });
-          // Refresh live ride data to update route phase
           await fetchLiveRideData();
           break;
           
         case 'completed':
           await completeRideAPI(currentRide.id);
+          
+          // Clear the stored ride ID
+          await AsyncStorage.removeItem('current_ride_id');
+          console.log('🧹 Cleared current_ride_id from storage');
+          
           Alert.alert('Ride Completed', 'Great job! Payment has been processed.');
           
-          // Stop live ride polling
           if (liveRideIntervalRef.current) {
             clearInterval(liveRideIntervalRef.current);
             liveRideIntervalRef.current = null;
           }
           
-          // Clear ride state
           setShowMap(false);
-          // webViewRef.current?.postMessage(JSON.stringify({ type: 'clearRoute' }));
           webViewRef.current?.postMessage(JSON.stringify({ type: 'clearMarkers' }));
           setCurrentRide(null);
           setLiveRideData(null);
           
-          // Reset ALL flags BEFORE restarting polling
           isAcceptingRideRef.current = false;
           isFetchingRef.current = false;
           
-          // Small delay to ensure state is fully cleared
           setTimeout(async () => {
-            // Restart polling if driver is still online
             if (isDriverOnline) {
               await fetchAvailableRides();
               const pollInterval = setInterval(() => fetchAvailableRides(), 10000);
@@ -787,28 +817,27 @@ if (driver?.current_location && !isDriverNearPickup) {
     try {
       await cancelRideAPI(currentRide.id);
       
+      // Clear the stored ride ID
+      await AsyncStorage.removeItem('current_ride_id');
+      console.log('🧹 Cleared current_ride_id from storage');
+      
       Alert.alert('Ride Cancelled', 'The ride has been cancelled.');
       
-      // Stop live ride polling
       if (liveRideIntervalRef.current) {
         clearInterval(liveRideIntervalRef.current);
         liveRideIntervalRef.current = null;
       }
       
-      // Clear ride state
       setCurrentRide(null);
       setShowMap(false);
       setLiveRideData(null);
       webViewRef.current?.postMessage(JSON.stringify({ type: 'clearRoute' }));
       webViewRef.current?.postMessage(JSON.stringify({ type: 'clearMarkers' }));
       
-      // Reset ALL flags BEFORE restarting polling
       isAcceptingRideRef.current = false;
       isFetchingRef.current = false;
       
-      // Small delay to ensure state is fully cleared
       setTimeout(async () => {
-        // Restart polling if driver is still online
         if (isDriverOnline) {
           await fetchAvailableRides();
           const pollInterval = setInterval(() => fetchAvailableRides(), 10000);
@@ -918,7 +947,6 @@ if (driver?.current_location && !isDriverNearPickup) {
                         : currentRide.pickup.address)}
                 </Text>
                 
-                {/* ETA Info */}
                 {liveRideData?.route_info && (
                   <View style={styles.etaContainer}>
                     <View style={styles.etaItem}>
@@ -1017,7 +1045,6 @@ if (driver?.current_location && !isDriverNearPickup) {
                   <Text style={styles.statusText}>{getStatusText()}</Text>
                 </LinearGradient>
                 
-                {/* Show toggle button only when no active ride */}
                 {!currentRide ? (
                   <TouchableOpacity style={styles.toggleButton} onPress={handleToggleOnline} testID="toggle-online-button">
                     <LinearGradient colors={isDriverOnline ? ['#dc2626', '#b91c1c'] : ['#FFB6D9', '#FF85C0']} style={styles.toggleButtonGradient}>
@@ -1102,6 +1129,9 @@ if (driver?.current_location && !isDriverNearPickup) {
                     <View style={styles.activeRideHeader}>
                       <Text style={styles.activeRideTitle}>Active Ride</Text>
                       <View style={styles.activeRideBadge}>
+                        <TouchableOpacity style={styles.mapActionButton} onPress={handleMessage}>
+                          <MessageSquare size={20} color="#ec4899" />
+                        </TouchableOpacity>
                         <View style={styles.pulseDot} />
                         <Text style={styles.activeRideBadgeText}>
                           {currentRide.status === 'accepted' ? 'Heading to Pickup' : 
@@ -1218,6 +1248,7 @@ const WaitingForRide = () => (
   </View>
 );
 
+// NOTE: Add your existing styles object here (const styles = StyleSheet.create({...}))
 // Styles
 const styles = StyleSheet.create({
   container: {
@@ -1507,6 +1538,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#831843',
+  },
+  mapActionButton: {
+    backgroundColor: '#fce7f3',
+    padding: 10,
+    borderRadius: 10,
   },
   activeRideBadge: {
     flexDirection: 'row',

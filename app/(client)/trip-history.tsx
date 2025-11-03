@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -6,6 +6,9 @@ import {
   TouchableOpacity,
   FlatList,
   Modal,
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -14,99 +17,176 @@ import {
   Flag,
   Calendar,
   Clock,
-  DollarSign,
+  Navigation,
   Star,
   X,
-  Navigation,
-  ChevronRight,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '@/constants/config';
 
 interface Trip {
-  id: string;
-  date: Date;
-  pickup: string;
-  destination: string;
+  id: number;
+  status: 'completed' | 'cancelled';
+  fare: number;
   distance: number;
   duration: number;
-  fare: number;
-  vehicleType: string;
-  paymentMethod: string;
-  driverName: string;
-  driverRating: number;
-  status: 'completed' | 'cancelled';
+  is_pool: boolean;
+  origin: {
+    lat: number;
+    lng: number;
+    address: string;
+  };
+  destination: {
+    lat: number;
+    lng: number;
+    address: string;
+  };
+  driver: {
+    id: number;
+    vehicle_type: string;
+    vehicle_number: string;
+    license_number: string;
+    rating: number;
+    user: {
+      id: number;
+      name: string;
+      phone: string | null;
+      email: string | null;
+      gender: string;
+      profile_photo: string | null;
+    };
+  } | null;
+  route_info: {
+    phase: string;
+    description: string;
+    trip_route: {
+      distance_meters: number;
+      distance_km: number;
+      duration_seconds: number;
+      duration_minutes: number;
+      duration_text: string;
+    };
+  };
+  passenger: {
+    id: number;
+    name: string;
+    phone: string | null;
+    email: string | null;
+    gender: string;
+    profile_photo: string | null;
+  };
+  timestamps: {
+    requested_at: string;
+    accepted_at: string | null;
+    started_at: string | null;
+    arrived_at: string | null;
+    completed_at: string | null;
+    cancelled_at: string | null;
+  };
+  cancellation?: {
+    reason: string | null;
+    note: string | null;
+    cancelled_by: number | null;
+  };
+  final_fare: number | null;
+  payment_status: string;
 }
-
-const MOCK_TRIPS: Trip[] = [
-  {
-    id: '1',
-    date: new Date('2024-10-03T14:30:00'),
-    pickup: 'Home, Hamra Street',
-    destination: 'AUB, Bliss Street',
-    distance: 2.5,
-    duration: 15,
-    fare: 12500,
-    vehicleType: 'Economy',
-    paymentMethod: 'Cash',
-    driverName: 'Fatima Khalil',
-    driverRating: 4.9,
-    status: 'completed',
-  },
-  {
-    id: '2',
-    date: new Date('2024-10-02T09:15:00'),
-    pickup: 'Downtown, Saifi Village',
-    destination: 'ABC Mall, Achrafieh',
-    distance: 4.2,
-    duration: 22,
-    fare: 18000,
-    vehicleType: 'Comfort',
-    paymentMethod: 'Card',
-    driverName: 'Nour Mansour',
-    driverRating: 4.7,
-    status: 'completed',
-  },
-  {
-    id: '3',
-    date: new Date('2024-10-01T18:45:00'),
-    pickup: 'Verdun, Commodore Hotel',
-    destination: 'Beirut Airport',
-    distance: 8.5,
-    duration: 35,
-    fare: 32000,
-    vehicleType: 'Premium',
-    paymentMethod: 'Wallet',
-    driverName: 'Ahmad Hassan',
-    driverRating: 4.8,
-    status: 'completed',
-  },
-  {
-    id: '4',
-    date: new Date('2024-09-30T12:00:00'),
-    pickup: 'Raouche, Pigeon Rocks',
-    destination: 'Jnah, Burj al-Barajneh',
-    distance: 5.1,
-    duration: 28,
-    fare: 0,
-    vehicleType: 'Economy',
-    paymentMethod: 'Cash',
-    driverName: 'Layla Ibrahim',
-    driverRating: 4.6,
-    status: 'cancelled',
-  },
-];
 
 export default function TripHistoryScreen() {
   const router = useRouter();
-  const [trips] = useState<Trip[]>(MOCK_TRIPS);
+  const [trips, setTrips] = useState<Trip[]>([]);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'completed' | 'cancelled'>('all');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const isMountedRef = useRef(true);
+
+  // Fetch trips from API
+  const fetchTrips = useCallback(async (page: number = 1, isRefresh: boolean = false) => {
+    try {
+      const authToken = await AsyncStorage.getItem('token');
+      if (!authToken) {
+        console.error('No auth token found');
+        return;
+      }
+
+      if (isRefresh) {
+        setRefreshing(true);
+      } else if (page === 1) {
+        setLoading(true);
+      }
+
+      const response = await fetch(`${API_BASE_URL}/passenger/rides/history?page=${page}`, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (!isMountedRef.current) return;
+
+      const fetchedTrips = result.data || [];
+      
+      if (page === 1 || isRefresh) {
+        setTrips(fetchedTrips);
+      } else {
+        setTrips(prev => [...prev, ...fetchedTrips]);
+      }
+
+      // Check if there are more pages
+      setHasMore(result.meta?.current_page < result.meta?.last_page);
+      setCurrentPage(result.meta?.current_page || 1);
+
+    } catch (error) {
+      console.error('Error fetching trips:', error);
+    } finally {
+      if (isMountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
+  }, []);
+
+  // Initial fetch
+  useEffect(() => {
+    isMountedRef.current = true;
+    fetchTrips(1);
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, [fetchTrips]);
+
+  // Pull to refresh
+  const onRefresh = useCallback(() => {
+    fetchTrips(1, true);
+  }, [fetchTrips]);
+
+  // Load more trips
+  const loadMore = useCallback(() => {
+    if (!loading && hasMore) {
+      fetchTrips(currentPage + 1);
+    }
+  }, [loading, hasMore, currentPage, fetchTrips]);
+
+  // Filter trips
   const filteredTrips = trips.filter(trip =>
     filterStatus === 'all' ? true : trip.status === filterStatus
   );
 
-  const formatDate = (date: Date) => {
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - date.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -118,7 +198,8 @@ export default function TripHistoryScreen() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
-  const formatTime = (date: Date) => {
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
@@ -131,8 +212,8 @@ export default function TripHistoryScreen() {
       <View style={styles.tripHeader}>
         <View style={styles.dateContainer}>
           <Calendar size={16} color="#ec4899" />
-          <Text style={styles.dateText}>{formatDate(item.date)}</Text>
-          <Text style={styles.timeText}>{formatTime(item.date)}</Text>
+          <Text style={styles.dateText}>{formatDate(item.timestamps.requested_at)}</Text>
+          <Text style={styles.timeText}>{formatTime(item.timestamps.requested_at)}</Text>
         </View>
         <View style={[
           styles.statusBadge,
@@ -150,14 +231,14 @@ export default function TripHistoryScreen() {
         <View style={styles.routePoint}>
           <View style={[styles.routeDot, { backgroundColor: '#ec4899' }]} />
           <Text style={styles.locationText} numberOfLines={1}>
-            {item.pickup}
+            {item.origin.address}
           </Text>
         </View>
         <View style={styles.routeLine} />
         <View style={styles.routePoint}>
           <View style={[styles.routeDot, { backgroundColor: '#831843' }]} />
           <Text style={styles.locationText} numberOfLines={1}>
-            {item.destination}
+            {item.destination.address}
           </Text>
         </View>
       </View>
@@ -165,19 +246,28 @@ export default function TripHistoryScreen() {
         <View style={styles.tripStats}>
           <View style={styles.statItem}>
             <Navigation size={14} color="#ec4899" />
-            <Text style={styles.statText}>{item.distance} km</Text>
+            <Text style={styles.statText}>{item.route_info.trip_route.distance_km} km</Text>
           </View>
           <View style={styles.statItem}>
             <Clock size={14} color="#ec4899" />
-            <Text style={styles.statText}>{item.duration} min</Text>
+            <Text style={styles.statText}>{Math.round(item.route_info.trip_route.duration_minutes)} min</Text>
           </View>
         </View>
         <Text style={styles.fareText}>
-          {item.status === 'completed' ? `${item.fare.toLocaleString()} LBP` : 'Cancelled'}
+          {item.status === 'completed' ? `€${item.final_fare?.toFixed(2) || item.fare.toFixed(2)}` : 'Cancelled'}
         </Text>
       </View>
     </TouchableOpacity>
   );
+
+  const renderFooter = () => {
+    if (!hasMore) return null;
+    return (
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color="#ec4899" />
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -239,7 +329,12 @@ export default function TripHistoryScreen() {
           </Text>
         </TouchableOpacity>
       </View>
-      {filteredTrips.length === 0 ? (
+      {loading && trips.length === 0 ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#ec4899" />
+          <Text style={styles.loadingText}>Loading trips...</Text>
+        </View>
+      ) : filteredTrips.length === 0 ? (
         <View style={styles.emptyContainer}>
           <MapPin size={64} color="#f472b6" />
           <Text style={styles.emptyText}>No trips found</Text>
@@ -247,10 +342,21 @@ export default function TripHistoryScreen() {
       ) : (
         <FlatList
           data={filteredTrips}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.id.toString()}
           renderItem={renderTripItem}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#ec4899']}
+              tintColor="#ec4899"
+            />
+          }
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={renderFooter}
         />
       )}
       <Modal visible={!!selectedTrip} transparent animationType="slide">
@@ -268,13 +374,13 @@ export default function TripHistoryScreen() {
               </TouchableOpacity>
             </LinearGradient>
             {selectedTrip && (
-              <View style={styles.detailsContent}>
+              <ScrollView style={styles.detailsContent} showsVerticalScrollIndicator={false}>
                 <View style={styles.detailSection}>
                   <Text style={styles.detailSectionTitle}>Trip Information</Text>
                   <View style={styles.detailRow}>
                     <Calendar size={20} color="#ec4899" />
                     <Text style={styles.detailText}>
-                      {selectedTrip.date.toLocaleDateString('en-US', {
+                      {new Date(selectedTrip.timestamps.requested_at).toLocaleDateString('en-US', {
                         weekday: 'long',
                         year: 'numeric',
                         month: 'long',
@@ -284,7 +390,7 @@ export default function TripHistoryScreen() {
                   </View>
                   <View style={styles.detailRow}>
                     <Clock size={20} color="#ec4899" />
-                    <Text style={styles.detailText}>{formatTime(selectedTrip.date)}</Text>
+                    <Text style={styles.detailText}>{formatTime(selectedTrip.timestamps.requested_at)}</Text>
                   </View>
                 </View>
                 <View style={styles.detailSection}>
@@ -294,7 +400,7 @@ export default function TripHistoryScreen() {
                       <MapPin size={20} color="#ec4899" />
                       <View style={styles.detailRouteInfo}>
                         <Text style={styles.detailRouteLabel}>Pickup</Text>
-                        <Text style={styles.detailRouteText}>{selectedTrip.pickup}</Text>
+                        <Text style={styles.detailRouteText}>{selectedTrip.origin.address}</Text>
                       </View>
                     </View>
                     <View style={styles.detailRouteLine} />
@@ -302,7 +408,7 @@ export default function TripHistoryScreen() {
                       <Flag size={20} color="#831843" />
                       <View style={styles.detailRouteInfo}>
                         <Text style={styles.detailRouteLabel}>Destination</Text>
-                        <Text style={styles.detailRouteText}>{selectedTrip.destination}</Text>
+                        <Text style={styles.detailRouteText}>{selectedTrip.destination.address}</Text>
                       </View>
                     </View>
                   </View>
@@ -312,31 +418,31 @@ export default function TripHistoryScreen() {
                   <View style={styles.statsGrid}>
                     <View style={styles.statsBox}>
                       <Navigation size={24} color="#ec4899" />
-                      <Text style={styles.statsValue}>{selectedTrip.distance} km</Text>
+                      <Text style={styles.statsValue}>{selectedTrip.route_info.trip_route.distance_km} km</Text>
                       <Text style={styles.statsLabel}>Distance</Text>
                     </View>
                     <View style={styles.statsBox}>
                       <Clock size={24} color="#ec4899" />
-                      <Text style={styles.statsValue}>{selectedTrip.duration} min</Text>
+                      <Text style={styles.statsValue}>{Math.round(selectedTrip.route_info.trip_route.duration_minutes)} min</Text>
                       <Text style={styles.statsLabel}>Duration</Text>
                     </View>
                   </View>
                 </View>
-                {selectedTrip.status === 'completed' && (
+                {selectedTrip.status === 'completed' && selectedTrip.driver && (
                   <>
                     <View style={styles.detailSection}>
                       <Text style={styles.detailSectionTitle}>Driver</Text>
                       <View style={styles.driverInfo}>
                         <View style={styles.driverAvatar}>
                           <Text style={styles.driverInitial}>
-                            {selectedTrip.driverName.charAt(0)}
+                            {selectedTrip.driver.user.name.charAt(0)}
                           </Text>
                         </View>
                         <View style={styles.driverDetails}>
-                          <Text style={styles.driverName}>{selectedTrip.driverName}</Text>
+                          <Text style={styles.driverName}>{selectedTrip.driver.user.name}</Text>
                           <View style={styles.ratingContainer}>
                             <Star size={16} color="#FFB800" fill="#FFB800" />
-                            <Text style={styles.ratingText}>{selectedTrip.driverRating}</Text>
+                            <Text style={styles.ratingText}>{selectedTrip.driver.rating}</Text>
                           </View>
                         </View>
                       </View>
@@ -346,17 +452,17 @@ export default function TripHistoryScreen() {
                       <View style={styles.paymentInfo}>
                         <View style={styles.paymentRow}>
                           <Text style={styles.paymentLabel}>Vehicle Type</Text>
-                          <Text style={styles.paymentValue}>{selectedTrip.vehicleType}</Text>
+                          <Text style={styles.paymentValue}>{selectedTrip.driver.vehicle_type}</Text>
                         </View>
                         <View style={styles.paymentRow}>
-                          <Text style={styles.paymentLabel}>Payment Method</Text>
-                          <Text style={styles.paymentValue}>{selectedTrip.paymentMethod}</Text>
+                          <Text style={styles.paymentLabel}>Payment Status</Text>
+                          <Text style={styles.paymentValue}>{selectedTrip.payment_status}</Text>
                         </View>
                         <View style={styles.paymentDivider} />
                         <View style={styles.paymentRow}>
                           <Text style={styles.paymentTotalLabel}>Total Fare</Text>
                           <Text style={styles.paymentTotalValue}>
-                            {selectedTrip.fare.toLocaleString()} LBP
+                            €{selectedTrip.final_fare?.toFixed(2) || selectedTrip.fare.toFixed(2)}
                           </Text>
                         </View>
                       </View>
@@ -365,10 +471,12 @@ export default function TripHistoryScreen() {
                 )}
                 {selectedTrip.status === 'cancelled' && (
                   <View style={styles.cancelledNotice}>
-                    <Text style={styles.cancelledText}>This trip was cancelled</Text>
+                    <Text style={styles.cancelledText}>
+                      {selectedTrip.cancellation?.note || 'This trip was cancelled'}
+                    </Text>
                   </View>
                 )}
-              </View>
+              </ScrollView>
             )}
           </View>
         </View>
@@ -437,6 +545,17 @@ const styles = StyleSheet.create({
   filterTextActive: {
     color: 'white',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#831843',
+    marginTop: 16,
+  },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -451,13 +570,17 @@ const styles = StyleSheet.create({
   list: {
     padding: 16,
   },
+  footerLoader: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
   tripCard: {
     backgroundColor: 'white',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    shadowColor: '#f754ef7e',
-    shadowOffset: { width: 0, height: 5 },
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,

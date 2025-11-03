@@ -8,13 +8,13 @@ import { UserProvider } from "@/hooks/user-store";
 import { RideProvider } from "@/hooks/ride-store";
 import { MapProvider } from "@/providers/MapProvider";
 import { useKeepAwake } from 'expo-keep-awake';
+import * as Notifications from 'expo-notifications';
+import { notificationService } from '@/services/NotificationService'; // Adjust the import path
 
 SplashScreen.preventAutoHideAsync();
-
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
-  
   return (
     <Stack screenOptions={{ headerBackTitle: "Back" }}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -32,9 +32,31 @@ export default function RootLayout() {
   if (Platform.OS !== 'web') {
     useKeepAwake();
   }
-  
+
   useEffect(() => {
     SplashScreen.hideAsync();
+  }, []);
+
+  useEffect(() => {
+    // Initialize notifications
+    notificationService.initialize();
+
+    // Handle notifications when the app is foregrounded
+    const subscription = Notifications.addNotificationReceivedListener((notification) => {
+      console.log('Notification received:', notification);
+      // Optionally show an alert or update state
+      alert(`Notification: ${notification.request.content.title}`);
+    });
+
+    // Handle notifications when the app is opened from a quit state
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (response?.notification) {
+        console.log('Notification opened from quit state:', response.notification);
+      }
+    });
+
+    // Clean up the listener when the component unmounts
+    return () => subscription.remove();
   }, []);
 
   return (

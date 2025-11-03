@@ -4,6 +4,7 @@ import React from 'react';
 import { Platform } from 'react-native';
 
 export default function RiderTabLayout() {
+  
   return (
     <Tabs
       screenOptions={{

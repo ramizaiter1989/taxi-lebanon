@@ -1,6 +1,19 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../constants/config';
+
+const getAuthHeaders = async () => {
+  const token = await AsyncStorage.getItem('token');
+  if (!token) throw new Error('No auth token found');
+  return {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  };
+};
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -35,24 +48,27 @@ class NotificationService {
 
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
-      
+
       if (existingStatus !== 'granted') {
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
       }
-      
+
       if (finalStatus !== 'granted') {
         console.log('Failed to get push token for push notification!');
         return;
       }
 
       const token = await Notifications.getExpoPushTokenAsync({
-        projectId: 'your-project-id', // Replace with your actual project ID
+        projectId: '2832cd6a-963d-4eab-8c7a-9cc81f938cc1', // Replace with your actual Expo project ID
       });
-      
+
       this.expoPushToken = token.data;
       console.log('Expo push token:', this.expoPushToken);
-      
+
+      // Send the Expo push token to the backend
+      await this.sendPushTokenToBackend(this.expoPushToken);
+
       if (Platform.OS === 'android') {
         Notifications.setNotificationChannelAsync('default', {
           name: 'default',
@@ -62,7 +78,7 @@ class NotificationService {
         });
       }
     } catch (error) {
-      console.log('Error initializing notifications:', error);
+      console.error('Error initializing notifications:', error);
     }
   }
 
@@ -82,7 +98,7 @@ class NotificationService {
         trigger: null,
       });
     } catch (error) {
-      console.log('Error sending local notification:', error);
+      console.error('Error sending local notification:', error);
     }
   }
 
@@ -91,7 +107,7 @@ class NotificationService {
     await this.sendLocalNotification({
       title: 'Ride Accepted! 🚗',
       body: `${driverName} is coming to pick you up. ETA: ${eta} minutes`,
-      data: { type: 'ride_accepted' }
+      data: { type: 'ride_accepted' },
     });
   }
 
@@ -99,7 +115,7 @@ class NotificationService {
     await this.sendLocalNotification({
       title: 'Driver Arriving 📍',
       body: `${driverName} is almost at your pickup location`,
-      data: { type: 'driver_arriving' }
+      data: { type: 'driver_arriving' },
     });
   }
 
@@ -107,7 +123,7 @@ class NotificationService {
     await this.sendLocalNotification({
       title: 'Trip Started 🛣️',
       body: 'Your ride has begun. Enjoy your journey!',
-      data: { type: 'trip_started' }
+      data: { type: 'trip_started' },
     });
   }
 
@@ -115,7 +131,7 @@ class NotificationService {
     await this.sendLocalNotification({
       title: 'Trip Completed ✅',
       body: `You have arrived safely. Fare: ${fare} LBP`,
-      data: { type: 'trip_completed' }
+      data: { type: 'trip_completed' },
     });
   }
 
@@ -123,7 +139,7 @@ class NotificationService {
     await this.sendLocalNotification({
       title: 'New Ride Request! 🚖',
       body: `From ${pickup} to ${dropoff} - ${fare} LBP`,
-      data: { type: 'new_ride_request' }
+      data: { type: 'new_ride_request' },
     });
   }
 
@@ -131,7 +147,7 @@ class NotificationService {
     await this.sendLocalNotification({
       title: 'Ride Cancelled ❌',
       body: 'The ride has been cancelled',
-      data: { type: 'ride_cancelled' }
+      data: { type: 'ride_cancelled' },
     });
   }
 
@@ -139,8 +155,28 @@ class NotificationService {
     await this.sendLocalNotification({
       title: '🚨 SOS Alert',
       body: `Emergency alert from ${location}`,
-      data: { type: 'sos_alert' }
+      data: { type: 'sos_alert' },
     });
+  }
+
+  async sendPushTokenToBackend(token: string) {
+    try {
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(`${API_BASE_URL}/update-push-token`, {
+        method: 'POST',
+        ...authHeaders,
+        body: JSON.stringify({ expo_push_token: token }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Failed to send push token to backend:', errorData);
+      } else {
+        console.log('Push token sent to backend successfully');
+      }
+    } catch (error) {
+      console.error('Error sending push token:', error);
+    }
   }
 
   getExpoPushToken() {

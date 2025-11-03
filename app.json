@@ -24,8 +24,13 @@
         "UIBackgroundModes": [
           "location",
           "fetch",
-          "remote-notification"],
+          "remote-notification"
+        ],
         "ITSAppUsesNonExemptEncryption": false
+      },
+      "notification": {
+        "icon": "./assets/images/icon.png",
+        "color": "#ffffff"
       }
     },
     "android": {
@@ -36,15 +41,19 @@
       },
       "package": "com.rami.bellaride",
       "permissions": [
-          "ACCESS_COARSE_LOCATION",
-          "ACCESS_FINE_LOCATION",
-          "ACCESS_BACKGROUND_LOCATION",
-          "FOREGROUND_SERVICE",
-          "RECEIVE_BOOT_COMPLETED",
-          "SCHEDULE_EXACT_ALARM",
-          "REQUEST_INSTALL_PACKAGES",
-          "POST_NOTIFICATIONS"
-        ]
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "RECEIVE_BOOT_COMPLETED",
+        "SCHEDULE_EXACT_ALARM",
+        "REQUEST_INSTALL_PACKAGES",
+        "POST_NOTIFICATIONS"
+      ],
+      "notification": {
+        "icon": "./assets/images/notification-icon.png",
+        "color": "#ffffff"
+      }
     },
     "web": {
       "favicon": "./assets/images/favicon.png",
@@ -69,6 +78,7 @@
       [
         "expo-notifications",
         {
+          "icon": "./assets/images/icon.png", 
           "color": "#ffffff"
         }
       ],
