@@ -1,23 +1,35 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
 import { View, StyleSheet } from 'react-native';
-import { useUser } from '@/hooks/user-store';
+import { authCache } from '@/utils/authCache';
 
 export default function IndexScreen() {
-  const { user, isLoading } = useUser();
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    if (!isLoading) {
-      if (user) {
-        // User IS logged in: Redirect to the main app based on role
-        router.replace(user.role === 'client' ? '/(client)/home' : '/(rider)/home');
+    const checkAuth = async () => {
+      await authCache.initialize();
+
+      if (authCache.isAuthenticated()) {
+        const role = authCache.getUserRole();
+        if (role === 'passenger') {
+          router.replace('/(client)/home');
+        } else if (role === 'driver') {
+          router.replace('/(rider)/home');
+        } else if (role === 'admin') {
+          router.replace('/(admin)/home');
+        } else {
+          router.replace('/login');
+        }
       } else {
-        // User IS NOT logged in: Redirect to the Login Screen
-        // Changed from '/role-selection' to '/login'
         router.replace('/login');
       }
-    }
-  }, [user, isLoading]);
+
+      setIsReady(true);
+    };
+
+    checkAuth();
+  }, []);
 
   return <View style={styles.container} />;
 }

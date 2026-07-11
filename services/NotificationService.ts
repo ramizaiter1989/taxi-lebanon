@@ -3,9 +3,10 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../constants/config';
+import { authCache } from '@/utils/authCache';
 
 const getAuthHeaders = async () => {
-  const token = await AsyncStorage.getItem('token');
+  const token = authCache.getToken();
   if (!token) throw new Error('No auth token found');
   return {
     headers: {

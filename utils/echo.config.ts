@@ -4,6 +4,7 @@ import Echo from 'laravel-echo';
 import Pusher from 'pusher-js/react-native'; // ✅ keep react-native version if you're in React Native
 import { API_BASE_URL } from '../constants/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { authCache } from '@/utils/authCache';
 
 // ✅ Make Pusher globally available for Laravel Echo
 (window as any).Pusher = Pusher;
@@ -13,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  */
 export const initializeEcho = async (): Promise<any> => {
   try {
-    const token = await AsyncStorage.getItem('token');
+    const token = authCache.getToken();
 
     if (!token) {
       console.error('No auth token found. User is not authenticated.');

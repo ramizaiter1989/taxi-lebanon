@@ -1,5 +1,5 @@
 import axios from "axios";
-import { API_BASE_URL } from "../constants/config";
+import { API_BASE_URL, MOCK_USERS, MockUser } from "../constants/config";
 
 // --- Request and Response Types ---
 interface RegisterPayload {
@@ -73,4 +73,37 @@ export const logout = async (token: string) => {
       headers: { Authorization: `Bearer ${token}` },
     }
   );
+};
+
+// Guest login (local session — browse app, sign up required for real actions)
+export const guestLogin = async (role: 'passenger' | 'driver' = 'passenger') => {
+  const { authCache } = await import('../utils/authCache');
+  await authCache.setGuestData(role);
+};
+
+// Mock login (local demo accounts — no backend call)
+export const findMockUser = (email: string, password: string): MockUser | null => {
+  const normalizedEmail = email.trim().toLowerCase();
+  return (
+    MOCK_USERS.find(
+      (user) =>
+        user.email.toLowerCase() === normalizedEmail && user.password === password
+    ) ?? null
+  );
+};
+
+export const mockLogin = async (email: string, password: string): Promise<MockUser | null> => {
+  const user = findMockUser(email, password);
+  if (!user) return null;
+
+  const { authCache } = await import('../utils/authCache');
+  await authCache.setMockAuthData({
+    token: `mock_token_${user.id}`,
+    userId: user.id,
+    userRole: user.role,
+    userName: user.name,
+    userEmail: user.email,
+  });
+
+  return user;
 };

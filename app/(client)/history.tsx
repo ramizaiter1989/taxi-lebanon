@@ -7,38 +7,9 @@ import { Ride } from '@/types/user';
 export default function ClientHistoryScreen() {
   const { rideHistory } = useRide();
 
-  const mockHistory: Ride[] = [
-    {
-      id: '1',
-      clientId: '1',
-      pickup: { latitude: 33.8938, longitude: 35.5018, address: 'Hamra, Beirut' },
-      dropoff: { latitude: 33.8869, longitude: 35.5131, address: 'Achrafieh, Beirut' },
-      status: 'completed',
-      fare: 8500,
-      estimatedDuration: 15,
-      createdAt: new Date('2024-01-15'),
-      completedAt: new Date('2024-01-15'),
-      date: '2024-01-15',
-      driverName: 'Fatima Khalil',
-      rating: 5
-    },
-    {
-      id: '2',
-      clientId: '1',
-      pickup: { latitude: 33.8869, longitude: 35.4962, address: 'Verdun, Beirut' },
-      dropoff: { latitude: 33.8959, longitude: 35.5011, address: 'Beirut Central District' },
-      status: 'completed',
-      fare: 6200,
-      estimatedDuration: 12,
-      createdAt: new Date('2024-01-12'),
-      completedAt: new Date('2024-01-12'),
-      date: '2024-01-12',
-      driverName: 'Nour Mansour',
-      rating: 4
-    }
-  ];
 
-  const allRides = [...rideHistory, ...mockHistory];
+
+  const allRides = [...rideHistory];
 
   return (
     <View style={styles.container}>

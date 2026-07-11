@@ -1,4 +1,5 @@
- import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+// app/(client)/active-ride.tsx
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -11,6 +12,7 @@ import {
   ScrollView,
   Modal,
   TextInput,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Phone, MessageSquare, Navigation, Clock, Star, AlertCircle, MapPin } from 'lucide-react-native';
@@ -20,10 +22,13 @@ import { WebView } from 'react-native-webview';
 import { API_BASE_URL } from '@/constants/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import mapHTML from '@/utils/mapHTML';
+import { authCache } from '@/utils/authCache';
+import * as Location from 'expo-location';
 
 // Constants
 const ACTIVE_STATUSES = ['pending', 'accepted', 'arrived', 'in_progress'];
 const POLL_INTERVAL = 10000; // 10 seconds
+const LOCATION_POLL_INTERVAL = 5000; // 5 seconds
 const PLACEHOLDER_PHOTO = 'https://via.placeholder.com/150';
 
 const CANCEL_REASONS = [
@@ -39,7 +44,7 @@ type RideStatus = 'searching' | 'driver_assigned' | 'arriving' | 'picked_up';
 
 export default function ActiveRideScreen() {
   const router = useRouter();
-  const [rideStatus, setRideStatus] = useState<RideStatus>('driver_assigned');
+  const [rideStatus, setRideStatus] = useState<RideStatus>('searching');
   const [driver, setDriver] = useState<any | null>(null);
   const [ride, setRide] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,20 +55,44 @@ export default function ActiveRideScreen() {
   const [note, setNote] = useState('');
   const [showMap, setShowMap] = useState(false);
   const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   
-  // Refs for cleanup
+  // Refs for cleanup - FIXED: Changed from NodeJS.Timeout to ReturnType<typeof setInterval>
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const locationPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isMountedRef = useRef(true);
   const webViewRef = useRef<WebView>(null);
 
+  // Clear stale cache on mount and ensure auth cache is initialized
+  useEffect(() => {
+    const initializeScreen = async () => {
+      try {
+        if (!authCache.isInitialized()) {
+          await authCache.initialize();
+          console.log('✓ Auth cache initialized in active-ride screen');
+        }
+        await AsyncStorage.removeItem('current_ride_id');
+        console.log('✓ Cleared stale ride cache');
+      } catch (error) {
+        console.error('Failed to initialize screen:', error);
+      }
+    };
+    
+    initializeScreen();
+    
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Fetch live ride from API
   const fetchLiveRide = useCallback(async () => {
     try {
-      const authToken = await AsyncStorage.getItem('token');
+      const authToken = authCache.getToken();
       if (!authToken) {
         console.error('No auth token found');
+        router.replace('/login');
         return;
       }
 
@@ -76,30 +105,43 @@ export default function ActiveRideScreen() {
       });
 
       if (!response.ok) {
+        if (response.status === 404) {
+          console.log('No active ride found');
+          setRide(null);
+          setDriver(null);
+          setRideStatus('searching');
+          setLoading(false);
+          router.replace('/(client)/home');
+          return;
+        }
         throw new Error(`API error: ${response.status}`);
       }
 
       const result = await response.json();
       const liveRide = result.data;
 
-      console.log('Live ride data:', liveRide);
+      console.log('Live ride data:', JSON.stringify(liveRide, null, 2));
 
-      // Only update state if component is still mounted
       if (!isMountedRef.current) return;
 
-      // Check if ride exists and has a valid status
       if (!liveRide || !ACTIVE_STATUSES.includes(liveRide.status)) {
+        console.log('Ride not active:', liveRide?.status);
         setRide(null);
         setDriver(null);
-        setRideStatus('searching');
+        router.replace('/(client)/home');
         return;
       }
 
-      // Set ride and driver
       setRide(liveRide);
-      setDriver(liveRide.driver?.user || null);
+      
+      if (liveRide.driver && liveRide.driver.user) {
+        setDriver(liveRide.driver.user);
+        console.log('Driver assigned:', liveRide.driver.user.name);
+      } else {
+        setDriver(null);
+        console.log('No driver assigned yet');
+      }
 
-      // Set ride status based on API status
       const statusMap: Record<string, RideStatus> = {
         'pending': 'searching',
         'accepted': 'driver_assigned',
@@ -109,19 +151,23 @@ export default function ActiveRideScreen() {
       
       setRideStatus(statusMap[liveRide.status] || 'searching');
 
-      // Start timer if trip started
       if (liveRide.status === 'in_progress' && liveRide.timestamps?.started_at && !timerStartTime) {
         setTimerStartTime(new Date(liveRide.timestamps.started_at));
       }
 
+      if (liveRide.id && ACTIVE_STATUSES.includes(liveRide.status)) {
+        await AsyncStorage.setItem('current_ride_id', liveRide.id.toString());
+      }
+
     } catch (error) {
       console.error('Failed to fetch live ride:', error);
+      Alert.alert('Error', 'Failed to load ride data. Please try again.');
     } finally {
       if (isMountedRef.current) {
         setLoading(false);
       }
     }
-  }, [timerStartTime]);
+  }, [timerStartTime, router]);
 
   // Timer effect
   useEffect(() => {
@@ -136,18 +182,18 @@ export default function ActiveRideScreen() {
     return () => {
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null;
       }
     };
   }, [timerStartTime]);
 
+  // Initial fetch on mount
+  useEffect(() => {
+    fetchLiveRide();
+  }, []);
+
   // Poll ride effect
   useEffect(() => {
-    // Initial fetch
-    fetchLiveRide();
-
-    // Setup polling only for active statuses
-    if (ride?.status && ACTIVE_STATUSES.includes(ride.status)) {
+    if (ride?.id) {
       pollIntervalRef.current = setInterval(() => {
         if (isMountedRef.current) {
           fetchLiveRide();
@@ -158,28 +204,42 @@ export default function ActiveRideScreen() {
     return () => {
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
       }
     };
-  }, [ride?.status, fetchLiveRide]);
+  }, [ride?.id, fetchLiveRide]);
 
-  // Cleanup on unmount
+  // Get user's current location
   useEffect(() => {
-    return () => {
-      isMountedRef.current = false;
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      if (locationPollRef.current) clearInterval(locationPollRef.current);
-    };
-  }, []);
+    if (!showMap) return;
+
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          console.error('Location permission denied');
+          return;
+        }
+
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+        
+        const { latitude, longitude } = location.coords;
+        setUserLocation({ lat: latitude, lng: longitude });
+        console.log('✓ User location:', latitude, longitude);
+      } catch (error) {
+        console.error('Error getting user location:', error);
+      }
+    })();
+  }, [showMap]);
 
   // Fetch driver location in real-time
   const fetchDriverLocation = useCallback(async () => {
     if (!ride?.driver?.id) return;
     
     try {
-      const token = await AsyncStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/driver/location`, {
+      const token = authCache.getToken();
+      const response = await fetch(`${API_BASE_URL}/drivers/${ride.driver.id}/location`, {
         headers: {
           'Accept': 'application/json',
           'Authorization': `Bearer ${token}`,
@@ -188,151 +248,192 @@ export default function ActiveRideScreen() {
 
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ Driver location from API:', data);
+        
         if (data.lat && data.lng && isMountedRef.current) {
-          setDriverLocation({ lat: data.lat, lng: data.lng });
+          const newLocation = { 
+            lat: parseFloat(data.lat), 
+            lng: parseFloat(data.lng) 
+          };
+          setDriverLocation(newLocation);
           
-          // Update marker on map if visible
           if (showMap && webViewRef.current) {
             webViewRef.current.postMessage(JSON.stringify({
               type: 'updateDriverLocation',
-              lat: data.lat,
-              lng: data.lng,
+              lat: newLocation.lat,
+              lng: newLocation.lng,
             }));
           }
         }
+      } else if (ride.current_location) {
+        const fallbackLocation = {
+          lat: parseFloat(ride.current_location.lat),
+          lng: parseFloat(ride.current_location.lng)
+        };
+        setDriverLocation(fallbackLocation);
       }
     } catch (error) {
       console.error('Failed to fetch driver location:', error);
+      if (ride.current_location) {
+        const fallbackLocation = {
+          lat: parseFloat(ride.current_location.lat),
+          lng: parseFloat(ride.current_location.lng)
+        };
+        setDriverLocation(fallbackLocation);
+      }
     }
-  }, [ride?.driver?.id, showMap]);
+  }, [ride?.driver?.id, ride?.current_location, showMap]);
 
   // Poll driver location when map is shown
   useEffect(() => {
-    if (showMap && ride?.driver?.id) {
-      fetchDriverLocation(); // Initial fetch
-      
-      locationPollRef.current = setInterval(() => {
-        if (isMountedRef.current) {
-          fetchDriverLocation();
-        }
-      }, 5000); // Update every 5 seconds
+    if (!showMap || !ride?.driver?.id) return;
 
-      return () => {
-        if (locationPollRef.current) {
-          clearInterval(locationPollRef.current);
-          locationPollRef.current = null;
-        }
-      };
-    }
+    fetchDriverLocation();
+    
+    locationPollRef.current = setInterval(() => {
+      if (isMountedRef.current) {
+        fetchDriverLocation();
+      }
+    }, LOCATION_POLL_INTERVAL);
+
+    return () => {
+      if (locationPollRef.current) {
+        clearInterval(locationPollRef.current);
+      }
+    };
   }, [showMap, ride?.driver?.id, fetchDriverLocation]);
-// cache the ride
-// Add this useEffect in ActiveRideScreen after other useEffects
-// This will save the ride ID whenever it changes
-
-useEffect(() => {
-  const saveRideIdToCache = async () => {
-    if (ride?.id) {
-      try {
-        await AsyncStorage.setItem('current_ride_id', ride.id.toString());
-        console.log('✓ Saved ride ID to cache:', ride.id);
-      } catch (error) {
-        console.error('Failed to save ride ID:', error);
-      }
-    }
-  };
-
-  saveRideIdToCache();
-}, [ride?.id]);
-
-// Optional: Clear ride ID when ride is completed/cancelled
-useEffect(() => {
-  const clearRideIdIfInactive = async () => {
-    if (ride && !ACTIVE_STATUSES.includes(ride.status)) {
-      try {
-        await AsyncStorage.removeItem('current_ride_id');
-        console.log('✓ Cleared ride ID from cache (ride inactive)');
-      } catch (error) {
-        console.error('Failed to clear ride ID:', error);
-      }
-    }
-  };
-
-  clearRideIdIfInactive();
-}, [ride?.status]);
 
   // Setup map route when map opens
   useEffect(() => {
-    if (showMap && webViewRef.current && ride) {
+    if (!showMap || !webViewRef.current || !ride) return;
+
+    const setupMap = setTimeout(() => {
+      if (!webViewRef.current || !ride) return;
+
+      const parseCoord = (value: any): number | null => {
+        if (value === null || value === undefined || value === '') return null;
+        const parsed = parseFloat(String(value));
+        return isNaN(parsed) ? null : parsed;
+      };
+
+      const pickupLat = parseCoord(ride.origin?.lat);
+      const pickupLng = parseCoord(ride.origin?.lng);
+      const destLat = parseCoord(ride.destination?.lat);
+      const destLng = parseCoord(ride.destination?.lng);
+
+      console.log('✓ Parsed coordinates:', {
+        pickup: { lat: pickupLat, lng: pickupLng },
+        destination: { lat: destLat, lng: destLng },
+        userLocation,
+        driverLocation,
+      });
+console.log("hsakjhfkjhdsf:", ride.driver.id);
+      if (pickupLat === null || pickupLng === null || destLat === null || destLng === null) {
+        console.error('Invalid coordinates - cannot display map');
+        Alert.alert(
+          'Map Error', 
+          'Location coordinates are not available. Please try again.',
+          [{ text: 'OK', onPress: () => setShowMap(false) }]
+        );
+        return;
+      }
+
+      // Clear existing
+      webViewRef.current.postMessage(JSON.stringify({ type: 'clearRoute' }));
+      webViewRef.current.postMessage(JSON.stringify({ type: 'clearMarkers' }));
+
+      // Add markers after delay
       setTimeout(() => {
-        if (!webViewRef.current || !ride) return;
-
-        const pickupLat = parseFloat(ride.origin?.latitude || ride.origin_lat);
-        const pickupLng = parseFloat(ride.origin?.longitude || ride.origin_lng);
-        const destLat = parseFloat(ride.destination?.latitude || ride.destination_lat);
-        const destLng = parseFloat(ride.destination?.longitude || ride.destination_lng);
-
-        // Clear existing markers and routes
-        webViewRef.current.postMessage(JSON.stringify({ type: 'clearRoute' }));
-        webViewRef.current.postMessage(JSON.stringify({ type: 'clearMarkers' }));
-
-        setTimeout(() => {
-          // Add pickup marker
+        // User location marker
+        
+        if (userLocation) {
           webViewRef.current?.postMessage(JSON.stringify({
-            type: 'addRouteMarker',
-            lat: pickupLat,
-            lng: pickupLng,
-            markerType: 'start',
+            type: 'addMarker',
+            lat: userLocation.lat,
+            lng: userLocation.lng,
+            title: 'Your Location',
+            markerType: 'user',
+            
           }));
+        }
 
-          // Add destination marker
+        // Pickup marker
+        webViewRef.current?.postMessage(JSON.stringify({
+          type: 'addMarker',
+          lat: pickupLat,
+          lng: pickupLng,
+          title: ride.origin?.address || 'Pickup',
+          markerType: 'pickup',
+        }));
+
+        // Destination marker
+        webViewRef.current?.postMessage(JSON.stringify({
+          type: 'addMarker',
+          lat: destLat,
+          lng: destLng,
+          title: ride.destination?.address || 'Destination',
+          markerType: 'destination',
+        }));
+
+        // Driver marker
+        if (driverLocation) {
           webViewRef.current?.postMessage(JSON.stringify({
-            type: 'addRouteMarker',
-            lat: destLat,
-            lng: destLng,
-            markerType: 'end',
+            type: 'addMarker',
+            lat: driverLocation.lat,
+            lng: driverLocation.lng,
+            title: driver?.name || 'Driver',
+            markerType: 'driver',
           }));
-
-          // Add driver marker if available
-          if (driverLocation) {
+        } else if (ride.current_location) {
+          const currentLat = parseCoord(ride.current_location.lat);
+          const currentLng = parseCoord(ride.current_location.lng);
+          if (currentLat !== null && currentLng !== null) {
             webViewRef.current?.postMessage(JSON.stringify({
-              type: 'addDriverMarker',
-              lat: driverLocation.lat,
-              lng: driverLocation.lng,
+              type: 'addMarker',
+              lat: currentLat,
+              lng: currentLng,
+              title: driver?.name || 'Driver',
+              markerType: 'driver',
             }));
           }
+        }
 
-          // Draw route
-          setTimeout(() => {
-            webViewRef.current?.postMessage(JSON.stringify({
-              type: 'showRoute',
-              start: { lat: pickupLat, lng: pickupLng },
-              end: { lat: destLat, lng: destLng },
-            }));
+        // Calculate and show route
+        // Calculate and show route
+setTimeout(() => {
+  webViewRef.current?.postMessage(JSON.stringify({
+    type: 'calculateRoute',
+    start: { lat: pickupLat, lng: pickupLng },
+    end: { lat: destLat, lng: destLng },
+  }));
 
-            // Center map on route
-            setTimeout(() => {
-              const centerLat = (pickupLat + destLat) / 2;
-              const centerLng = (pickupLng + destLng) / 2;
-              webViewRef.current?.postMessage(JSON.stringify({
-                type: 'setView',
-                lat: centerLat,
-                lng: centerLng,
-                zoom: 13,
-              }));
-            }, 500);
-          }, 500);
-        }, 300);
+  // If we have user location, center the map on them
+  if (userLocation) {
+    webViewRef.current?.postMessage(JSON.stringify({
+      type: 'centerMap',
+      lat: userLocation.lat,
+      lng: userLocation.lng,
+      zoom: 15, // slightly closer zoom
+    }));
+  } else {
+    // fallback: center on pickup
+    webViewRef.current?.postMessage(JSON.stringify({
+      type: 'centerMap',
+      lat: pickupLat,
+      lng: pickupLng,
+      zoom: 14,
+    }));
+  }
+}, 300);
+
       }, 500);
-    }
-  }, [showMap, ride, driverLocation]);
+    }, 1000);
 
-  const handleTrackOnMap = useCallback(() => {
-    setShowMap(true);
-  }, []);
+    return () => clearTimeout(setupMap);
+  }, [showMap, ride, driverLocation, userLocation, driver]);
 
-  const handleCloseMap = useCallback(() => {
-    setShowMap(false);
-  }, []);
+  const handleTrackOnMap = useCallback(() => setShowMap(true), []);
+  const handleCloseMap = useCallback(() => setShowMap(false), []);
 
   const formatTime = useCallback((seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -349,9 +450,8 @@ useEffect(() => {
   }, [driver?.phone]);
 
   const handleMessage = useCallback(() => {
-    Alert.alert('Message Driver', 'Messaging feature coming soon!');
-    router.replace('/(client)/TestChat');
-  }, []);
+    router.push('/(client)/TestChat');
+  }, [router]);
 
   const handleCancelRide = useCallback(() => {
     setCancelModalVisible(true);
@@ -361,7 +461,7 @@ useEffect(() => {
     if (!ride?.id) return;
     
     try {
-      const token = await AsyncStorage.getItem('token');
+      const token = authCache.getToken();
       const response = await fetch(`${API_BASE_URL}/rides/${ride.id}/cancel`, {
         method: 'POST',
         headers: {
@@ -375,12 +475,11 @@ useEffect(() => {
         }),
       });
 
-      const data = await response.json();
-      
       if (!response.ok) {
-        throw new Error(data?.message || `API error: ${response.status}`);
+        throw new Error(`API error: ${response.status}`);
       }
 
+      await AsyncStorage.removeItem('current_ride_id');
       setCancelModalVisible(false);
       Alert.alert('Success', 'Ride cancelled successfully');
       router.replace('/(client)/home');
@@ -436,16 +535,8 @@ useEffect(() => {
             javaScriptEnabled={true}
             domStorageEnabled={true}
             originWhitelist={['*']}
-            onLoadEnd={() => {
-              console.log('Map loaded for passenger tracking');
-            }}
-            onError={(syntheticEvent) => {
-              const { nativeEvent } = syntheticEvent;
-              console.error('WebView error: ', nativeEvent);
-            }}
           />
           
-          {/* Map Overlay Header */}
           <View style={styles.mapOverlay}>
             <TouchableOpacity onPress={handleCloseMap} style={styles.closeMapButton}>
               <LinearGradient colors={['#fff', '#fdf2f8']} style={styles.closeMapGradient}>
@@ -454,7 +545,6 @@ useEffect(() => {
               </LinearGradient>
             </TouchableOpacity>
 
-            {/* Map Status Card */}
             <View style={styles.mapStatusCard}>
               <LinearGradient colors={['#fff', '#fdf2f8']} style={styles.mapStatusGradient}>
                 <Text style={styles.mapStatusTitle}>{statusInfo.title}</Text>
@@ -480,7 +570,6 @@ useEffect(() => {
               </LinearGradient>
             </View>
 
-            {/* Driver Info Card on Map */}
             {driver && (
               <View style={styles.mapDriverCard}>
                 <LinearGradient colors={['#fff', '#fdf2f8']} style={styles.mapDriverGradient}>
@@ -509,12 +598,7 @@ useEffect(() => {
         </View>
       ) : (
         <>
-          <LinearGradient 
-            colors={['#fdf2f8', '#fce7f3']} 
-            start={{ x: 0, y: 0 }} 
-            end={{ x: 1, y: 1 }} 
-            style={styles.header}
-          >
+          <LinearGradient colors={['#fdf2f8', '#fce7f3']} style={styles.header}>
             <View style={styles.headerContent}>
               <TouchableOpacity style={styles.emergencyButton}>
                 <AlertCircle size={24} color="#ec4899" />
@@ -530,7 +614,6 @@ useEffect(() => {
             contentContainerStyle={styles.scrollContent} 
             showsVerticalScrollIndicator={false}
           >
-            {/* Timer */}
             {rideStatus === 'picked_up' && (
               <View style={styles.timerContainer}>
                 <Text style={styles.timerLabel}>Ride Duration</Text>
@@ -538,14 +621,12 @@ useEffect(() => {
               </View>
             )}
 
-            {/* Status Banner */}
             <View style={[styles.statusBanner, { backgroundColor: statusInfo.color }]}>
               <Text style={styles.statusTitle}>{statusInfo.title}</Text>
               <Text style={styles.statusSubtitle}>{statusInfo.subtitle}</Text>
             </View>
 
-            {/* ETA Cards */}
-            {ride?.route_info?.phase === 'to_pickup' && ride?.route_info?.pickup_eta && (
+            {ride && ride.route_info?.phase === 'to_pickup' && ride.route_info?.pickup_eta && (
               <ETACard 
                 icon={<Clock size={32} color="#ec4899" />}
                 label="Driver arriving in"
@@ -554,7 +635,7 @@ useEffect(() => {
               />
             )}
             
-            {(ride?.route_info?.phase === 'at_pickup' || ride?.route_info?.phase === 'in_trip') && (
+            {ride && (ride.route_info?.phase === 'at_pickup' || ride.route_info?.phase === 'in_trip') && (
               <ETACard 
                 icon={<Navigation size={32} color="#ec4899" />}
                 label="Trip Duration"
@@ -563,8 +644,7 @@ useEffect(() => {
               />
             )}
 
-            {/* Driver Card */}
-            {driver ? (
+            {driver && ride ? (
               <DriverCard 
                 driver={driver}
                 ride={ride}
@@ -578,15 +658,14 @@ useEffect(() => {
               </View>
             )}
 
-            {/* Trip Details */}
-            <TripDetails ride={ride} />
+            {ride && <TripDetails ride={ride} />}
 
-            {/* Bottom Section */}
             <View style={styles.bottomSection}>
               <View style={styles.fareInfo}>
                 <Text style={styles.fareLabel}>Estimated Fare</Text>
                 <Text style={styles.fareValue}>${ride?.fare?.toFixed(2) || '0.00'}</Text>
               </View>
+              
               <TouchableOpacity style={styles.trackButton} onPress={handleTrackOnMap}>
                 <LinearGradient colors={['#ec4899', '#f472b6']} style={styles.trackGradient}>
                   <Navigation size={20} color="white" />
@@ -596,7 +675,6 @@ useEffect(() => {
             </View>
           </ScrollView>
 
-          {/* Cancel Modal */}
           <CancelRideModal 
             visible={cancelModalVisible}
             selectedReason={selectedReason}
@@ -896,8 +974,6 @@ const styles = StyleSheet.create({
   confirmBtn: { backgroundColor: '#ec4899', padding: 12, borderRadius: 10 },
   disabledBtn: { opacity: 0.5 },
   confirmBtnText: { color: '#fff', fontWeight: '600' },
-
-
   
   // Map styles
   mapContainer: { flex: 1 },

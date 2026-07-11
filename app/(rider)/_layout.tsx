@@ -2,6 +2,8 @@ import { Tabs } from 'expo-router';
 import { Car, Clock, DollarSign, User } from 'lucide-react-native';
 import React from 'react';
 import { Platform } from 'react-native';
+import mapHTML from '@/utils/mapHTML';
+import { authCache } from '@/utils/authCache';
 
 export default function RiderTabLayout() {
   

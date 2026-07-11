@@ -8,10 +8,13 @@ import { UserProvider } from "@/hooks/user-store";
 import { RideProvider } from "@/hooks/ride-store";
 import { MapProvider } from "@/providers/MapProvider";
 import { useKeepAwake } from 'expo-keep-awake';
-import * as Notifications from 'expo-notifications';
-import { notificationService } from '@/services/NotificationService'; // Adjust the import path
+import { authCache } from '@/utils/authCache';
 
+// Initialize splash screen and auth cache at the module level
 SplashScreen.preventAutoHideAsync();
+authCache.initialize();
+
+// Create a single instance of QueryClient
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
@@ -19,6 +22,7 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerBackTitle: "Back" }}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="login" options={{ headerShown: false }} />
+      <Stack.Screen name="register" options={{ headerShown: false }} />
       <Stack.Screen name="role-selection" options={{ headerShown: false }} />
       <Stack.Screen name="search" options={{ headerShown: false }} />
       <Stack.Screen name="(client)" options={{ headerShown: false }} />
@@ -28,35 +32,12 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
-  // Only use keep awake on native platforms (iOS and Android)
-  if (Platform.OS !== 'web') {
-    useKeepAwake();
-  }
+  // Only use keep awake on native platforms
+  Platform.OS !== 'web' && useKeepAwake();
 
   useEffect(() => {
+    // Hide splash screen after initial render
     SplashScreen.hideAsync();
-  }, []);
-
-  useEffect(() => {
-    // Initialize notifications
-    notificationService.initialize();
-
-    // Handle notifications when the app is foregrounded
-    const subscription = Notifications.addNotificationReceivedListener((notification) => {
-      console.log('Notification received:', notification);
-      // Optionally show an alert or update state
-      alert(`Notification: ${notification.request.content.title}`);
-    });
-
-    // Handle notifications when the app is opened from a quit state
-    Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (response?.notification) {
-        console.log('Notification opened from quit state:', response.notification);
-      }
-    });
-
-    // Clean up the listener when the component unmounts
-    return () => subscription.remove();
   }, []);
 
   return (

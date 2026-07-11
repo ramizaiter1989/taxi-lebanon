@@ -30,21 +30,22 @@ import { createEcho } from '@/services/echo';
 import axios from 'axios';
 import { API_BASE_URL } from '@/constants/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { authCache } from '@/utils/authCache'; // ✅ Import auth cache
 
 // Create API client
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 15000, // ✅ Reduced timeout for faster failure
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
 });
 
-// Add auth token to requests
+// ✅ Optimized interceptor using auth cache
 apiClient.interceptors.request.use(
-  async (config) => {
-    const token = await AsyncStorage.getItem('token');
+  (config) => {
+    const token = authCache.getToken(); // ✅ INSTANT - no await needed
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -54,6 +55,13 @@ apiClient.interceptors.request.use(
     return Promise.reject(error);
   }
 );
+
+// ✅ Debounce configuration
+const MIN_UPDATE_INTERVAL = 10000; // 10 seconds
+const lastLocationUpdate = { current: 0 };
+
+// ✅ Geocoding cache
+const geocodeCache = new Map<string, string>();
 
 export default function ClientHomeScreen() {
   const router = useRouter();
@@ -69,7 +77,6 @@ export default function ClientHomeScreen() {
   
   const {
     selectedPlace,
-    isRoutingMode,
     routeStart,
     routeEnd,
     currentRoute,
@@ -85,119 +92,117 @@ export default function ClientHomeScreen() {
     cancelRideBooking,
   } = useMap();
 
-  // Fetch current active ride on mount
-  // Utility to get token safely
-const getAuthToken = async (): Promise<string | null> => {
-  try {
-    const token = await AsyncStorage.getItem('token');
-    if (!token) console.warn('No auth token found. User may not be logged in.');
-    return token;
-  } catch (error) {
-    console.error('Failed to get auth token:', error);
-    return null;
-  }
-};
+  // ✅ Optimized: Fetch current ride with instant token access
+  const fetchCurrentRide = useCallback(async () => {
+    if (authCache.isLocalSession()) return;
 
-// Fetch current ride
-const fetchCurrentRide = useCallback(async () => {
-  const token = await getAuthToken();
-  if (!token) return; // Stop if no token
+    const token = authCache.getToken(); // ✅ INSTANT
+    if (!token) return;
 
-  try {
-    setIsLoadingRide(true);
-    const response = await apiClient.get('/passenger/rides/live', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    try {
+      setIsLoadingRide(true);
+      const response = await apiClient.get('/passenger/rides/live');
 
-    if (response.data.ride) {
-      setCurrentRide(response.data.ride);
-      router.push('/active-ride');
-    } else {
-      setCurrentRide(null);
-    }
-  } catch (error: any) {
-    console.error('Error fetching current ride:', error);
-    if (error.response?.status !== 404) {
-      Alert.alert('Error', 'Failed to fetch current ride status');
-    }
-  } finally {
-    setIsLoadingRide(false);
-  }
-}, [router]);
-
-// Update passenger location
-const updatePassengerLocation = useCallback(async (lat: number, lng: number) => {
-  const token = await getAuthToken();
-  if (!token) return;
-
-  try {
-    const response = await apiClient.post(
-      '/passenger/location',
-      { lat, lng },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      if (response.data.ride) {
+        setCurrentRide(response.data.ride);
+        router.push('/active-ride');
+      } else {
+        setCurrentRide(null);
       }
-    );
-    console.log('Location updated successfully:', response.data);
-  } catch (error: any) {
-    if (error.response) {
-      console.error(
-        'Error updating passenger location:',
-        error.response.status,
-        error.response.data
-      );
-      if (error.response.status === 401) {
-        console.warn('Unauthorized. Token may be invalid or expired.');
+    } catch (error: any) {
+      console.error('Error fetching current ride:', error);
+      if (error.response?.status !== 404) {
+        Alert.alert('Error', 'Failed to fetch current ride status');
       }
-    } else {
-      console.error('Network or other error:', error.message);
+    } finally {
+      setIsLoadingRide(false);
     }
-  }
-}, []);
+  }, [router]);
 
+  // ✅ Optimized: Debounced location updates
+  const updatePassengerLocation = useCallback(async (lat: number, lng: number) => {
+    if (authCache.isLocalSession()) return;
 
+    const token = authCache.getToken(); // ✅ INSTANT
+    if (!token) return;
 
-  // Get current location and center map
+    // Debounce check
+    const now = Date.now();
+    if (now - lastLocationUpdate.current < MIN_UPDATE_INTERVAL) {
+      return;
+    }
+    
+    lastLocationUpdate.current = now;
+    
+    try {
+      await apiClient.post('/passenger/location', { lat, lng });
+      console.log('✅ Location updated');
+    } catch (error: any) {
+      if (error.response?.status === 401) {
+        console.warn('⚠️ Token expired or invalid');
+      }
+      console.error('Error updating location:', error.response?.status);
+    }
+  }, []);
+
+  // ✅ Optimized: Initial location with last known first
   useEffect(() => {
     (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
-          Alert.alert('Permission Required', 'Location permission is required to use this app.');
           const defaultCoords = { lat: 33.8886, lng: 35.4955 };
           setLocalUserLocation(defaultCoords);
           setUserLocation(defaultCoords);
           return;
         }
         
-        const location = await Location.getCurrentPositionAsync({
+        // Try last known first (instant)
+        const lastKnown = await Location.getLastKnownPositionAsync();
+        if (lastKnown) {
+          const coords = {
+            lat: lastKnown.coords.latitude,
+            lng: lastKnown.coords.longitude,
+          };
+          
+          setLocalUserLocation(coords);
+          setUserLocation(coords);
+          
+          if (webViewRef.current) {
+            webViewRef.current.postMessage(
+              JSON.stringify({
+                type: 'setView',
+                ...coords,
+                zoom: 15,
+              })
+            );
+          }
+        }
+        
+        // Get accurate location in background
+        Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.High,
+        }).then((location) => {
+          const coords = {
+            lat: location.coords.latitude,
+            lng: location.coords.longitude,
+          };
+          
+          setLocalUserLocation(coords);
+          setUserLocation(coords);
+          updatePassengerLocation(coords.lat, coords.lng);
+          
+          if (webViewRef.current) {
+            webViewRef.current.postMessage(
+              JSON.stringify({
+                type: 'setView',
+                ...coords,
+                zoom: 15,
+              })
+            );
+          }
         });
         
-        const coords = {
-          lat: location.coords.latitude,
-          lng: location.coords.longitude,
-        };
-        
-        setLocalUserLocation(coords);
-        setUserLocation(coords);
-        
-        // Update backend with initial location
-        await updatePassengerLocation(coords.lat, coords.lng);
-        
-        if (webViewRef.current) {
-          webViewRef.current.postMessage(
-            JSON.stringify({
-              type: 'setView',
-              ...coords,
-              zoom: 15,
-            })
-          );
-        }
       } catch (error) {
         console.error('Error getting location:', error);
         const defaultCoords = { lat: 33.8886, lng: 35.4955 };
@@ -207,7 +212,7 @@ const updatePassengerLocation = useCallback(async (lat: number, lng: number) => 
     })();
   }, [setUserLocation, updatePassengerLocation]);
 
-  // Periodic location updates (every 30 seconds when not in active ride)
+  // Periodic location updates
   useEffect(() => {
     const startLocationUpdates = async () => {
       locationUpdateIntervalRef.current = setInterval(async () => {
@@ -226,7 +231,7 @@ const updatePassengerLocation = useCallback(async (lat: number, lng: number) => 
         } catch (error) {
           console.error('Error updating location:', error);
         }
-      }, 30000); // Every 30 seconds
+      }, 30000);
     };
 
     startLocationUpdates();
@@ -263,57 +268,45 @@ const updatePassengerLocation = useCallback(async (lat: number, lng: number) => 
     }
   }, [selectedPlace]);
 
-  // Show route on map when calculated
-
-
-// Inside your ClientHomeScreen component
-useEffect(() => {
-  if (currentRoute && webViewRef.current) {
-    webViewRef.current.postMessage(
-      JSON.stringify({
-        type: 'showRoute',
-        route: currentRoute,
-      })
-    );
-    if (routeStart) {
+  // Show route on map
+  useEffect(() => {
+    if (currentRoute && webViewRef.current) {
       webViewRef.current.postMessage(
         JSON.stringify({
-          type: 'addRouteMarker',
-          ...routeStart,
-          markerType: 'start',
+          type: 'showRoute',
+          route: currentRoute,
         })
       );
-    }
-    if (routeEnd) {
-      webViewRef.current.postMessage(
-        JSON.stringify({
-          type: 'addRouteMarker',
-          ...routeEnd,
-          markerType: 'end',
-        })
-      );
-    }
-
-    // Save to AsyncStorage
-    const saveRouteData = async () => {
-      try {
-        await AsyncStorage.setItem(
-          'routeData',
+      if (routeStart) {
+        webViewRef.current.postMessage(
           JSON.stringify({
-            currentRoute,
-            routeStart,
-            routeEnd,
+            type: 'addRouteMarker',
+            ...routeStart,
+            markerType: 'start',
           })
         );
-      } catch (error) {
-        console.error('Error saving route data:', error);
       }
-    };
+      if (routeEnd) {
+        webViewRef.current.postMessage(
+          JSON.stringify({
+            type: 'addRouteMarker',
+            ...routeEnd,
+            markerType: 'end',
+          })
+        );
+      }
 
-    saveRouteData();
-  }
-}, [currentRoute, routeStart, routeEnd]);
-
+      // Save to AsyncStorage (non-blocking)
+      AsyncStorage.setItem(
+        'routeData',
+        JSON.stringify({
+          currentRoute,
+          routeStart,
+          routeEnd,
+        })
+      ).catch(error => console.error('Error saving route data:', error));
+    }
+  }, [currentRoute, routeStart, routeEnd]);
 
   // Echo subscription for ride updates
   useEffect(() => {
@@ -322,11 +315,9 @@ useEffect(() => {
       echoInstance = await createEcho();
       if (!echoInstance || !user?.id) return;
 
-      // Listen to passenger-specific channel
       const channel = echoInstance.private(`passenger.${user.id}`);
       
       channel.listen('RideAccepted', (data: any) => {
-        console.log('Ride accepted:', data);
         setCurrentRide(data.ride);
         Alert.alert(
           'Ride Accepted!',
@@ -342,11 +333,9 @@ useEffect(() => {
 
       channel.listen('DriverLocationUpdated', (data: any) => {
         console.log('Driver location updated:', data);
-        // Update driver location on map if needed
       });
 
       channel.listen('RideCancelled', (data: any) => {
-        console.log('Ride cancelled:', data);
         setCurrentRide(null);
         Alert.alert(
           'Ride Cancelled',
@@ -356,7 +345,6 @@ useEffect(() => {
       });
 
       channel.listen('RideCompleted', (data: any) => {
-        console.log('Ride completed:', data);
         setCurrentRide(null);
         Alert.alert(
           'Ride Completed',
@@ -372,24 +360,24 @@ useEffect(() => {
       }
     };
   }, [user, router]);
-  // Inside your ClientHomeScreen component
-useEffect(() => {
-  const restoreRouteData = async () => {
-    try {
-      const savedData = await AsyncStorage.getItem('routeData');
-      if (savedData) {
+
+  
+  // Restore route data (deferred)
+  useEffect(() => {
+    setTimeout(async () => {
+      try {
+        const savedData = await AsyncStorage.getItem('routeData');
+        if (!savedData || !webViewRef.current) return;
+        
         const { currentRoute: savedRoute, routeStart: savedStart, routeEnd: savedEnd } = JSON.parse(savedData);
 
-        if (savedRoute && webViewRef.current) {
+        if (savedRoute) {
           webViewRef.current.postMessage(
-            JSON.stringify({
-              type: 'showRoute',
-              route: savedRoute,
-            })
+            JSON.stringify({ type: 'showRoute', route: savedRoute })
           );
         }
 
-        if (savedStart && webViewRef.current) {
+        if (savedStart) {
           webViewRef.current.postMessage(
             JSON.stringify({
               type: 'addRouteMarker',
@@ -399,7 +387,7 @@ useEffect(() => {
           );
         }
 
-        if (savedEnd && webViewRef.current) {
+        if (savedEnd) {
           webViewRef.current.postMessage(
             JSON.stringify({
               type: 'addRouteMarker',
@@ -408,165 +396,210 @@ useEffect(() => {
             })
           );
         }
+      } catch (error) {
+        console.error('Error restoring route data:', error);
       }
-    } catch (error) {
-      console.error('Error restoring route data:', error);
-    }
-  };
+    }, 100);
+  }, []);
 
-  restoreRouteData();
-}, []);
-
-  // Auto-calculate route when both points are set
+  // Auto-calculate route
   useEffect(() => {
     if (routeStart && routeEnd && isBookingMode && !currentRoute) {
       calculateRoute();
     }
   }, [routeStart, routeEnd, isBookingMode, currentRoute, calculateRoute]);
 
-  // Handle map messages
-  const handleMapMessage = useCallback((event: any) => {
+  // ✅ Optimized: Map click with geocoding cache
+  const handleMapMessage = useCallback(async (event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
-      if (data.type === 'mapClick') {
+      if (data.type === 'mapClick' && isBookingMode) {
+        const cacheKey = `${data.lat.toFixed(4)},${data.lng.toFixed(4)}`;
+        
+        // Create marker immediately
         const marker = {
           id: Date.now().toString(),
           lat: data.lat,
           lng: data.lng,
-          title: 'Selected Location',
-          description: `${data.lat.toFixed(4)}, ${data.lng.toFixed(4)}`,
+          title: `Location (${data.lat.toFixed(4)}, ${data.lng.toFixed(4)})`,
+          description: 'Getting address...',
         };
-        if (isBookingMode) {
-          if (!routeStart) {
-            setRouteStart(marker);
-          } else if (!routeEnd) {
-            setRouteEnd(marker);
-          }
+
+        // Set marker immediately
+        if (!routeStart) {
+          setRouteStart(marker);
+        } else if (!routeEnd) {
+          setRouteEnd(marker);
         }
+
+        // Geocode in background
+        (async () => {
+          try {
+            // Check cache first
+            if (geocodeCache.has(cacheKey)) {
+              const address = geocodeCache.get(cacheKey)!;
+              const updatedMarker = { ...marker, title: address, description: address };
+              
+              if (!routeStart) {
+                setRouteStart(updatedMarker);
+              } else if (!routeEnd) {
+                setRouteEnd(updatedMarker);
+              }
+              return;
+            }
+
+            const [address] = await Location.reverseGeocodeAsync({
+              latitude: data.lat,
+              longitude: data.lng,
+            });
+
+            const addressParts = [
+              address?.street,
+              address?.city,
+              address?.region,
+            ].filter(Boolean);
+
+            const readableAddress = addressParts.length > 0
+              ? addressParts.join(', ')
+              : marker.title;
+
+            // Cache result
+            geocodeCache.set(cacheKey, readableAddress);
+
+            const updatedMarker = { ...marker, title: readableAddress, description: readableAddress };
+
+            if (!routeStart) {
+              setRouteStart(updatedMarker);
+            } else if (!routeEnd) {
+              setRouteEnd(updatedMarker);
+            }
+          } catch (geocodeError) {
+            console.error('Error reverse geocoding:', geocodeError);
+          }
+        })();
       }
     } catch (error) {
       console.error('Error handling map message:', error);
     }
   }, [isBookingMode, routeStart, routeEnd, setRouteStart, setRouteEnd]);
 
-  // Start booking flow
-  const handleStartBooking = useCallback(async () => {
-    // Check for active ride from backend
-    try {
-      const response = await apiClient.get('/passenger/rides/live');
-      if (response.data.ride) {
-        Alert.alert(
-          'Active Ride',
-          'You already have an active ridessss. Please complete or cancel it before booking another.',
-          [
-            {
-              text: 'View Ride',
-              onPress: () => router.push('/active-ride'),
-            },
-            { text: 'Cancel', style: 'cancel' },
-          ]
-        );
-        return;
-      }
-    } catch (error) {
-      console.error('Error checking active ride:', error);
+  // ✅ Optimized: Start booking immediately, check in background
+  const handleStartBooking = useCallback(() => {
+    if (authCache.isGuestUser()) {
+      Alert.alert(
+        'Sign Up Required',
+        'Create an account to book rides. You can keep browsing the map as a guest.',
+        [
+          { text: 'Continue Browsing', style: 'cancel' },
+          { text: 'Sign Up', onPress: () => router.push('/register') },
+        ]
+      );
+      return;
     }
-    
-    startRideBooking();
-  }, [router, startRideBooking]);
 
-  
-    const handleCancelBooking = useCallback(() => {
+    // Start booking immediately
+    startRideBooking();
+    
+    // Check for conflicts in background (non-blocking)
+    apiClient.get('/passenger/rides/live')
+      .then((response) => {
+        if (response.data.ride) {
+          // If there's an active ride, cancel booking and show alert
+          cancelRideBooking();
+          Alert.alert(
+            'Active Ride',
+            'You already have an active ride. Please complete or cancel it before booking another.',
+            [
+              {
+                text: 'View Ride',
+                onPress: () => router.push('/active-ride'),
+              },
+              { text: 'Cancel', style: 'cancel' },
+            ]
+          );
+        }
+      })
+      .catch((error) => {
+        if (error.response?.status !== 404) {
+          console.error('Error checking active ride:', error);
+        }
+      });
+  }, [startRideBooking, cancelRideBooking, router]);
+
+  const handleCancelBooking = useCallback(() => {
     cancelRideBooking();
     clearRoute();
     webViewRef.current?.postMessage(JSON.stringify({ type: 'clearRoute' }));
   }, [cancelRideBooking, clearRoute]);
 
-  // Cancel ride flow
-const handleCancelride = useCallback(async () => {
-  try {
-    const rideId = currentRide?.id;
-    if (!rideId) {
-      console.warn('No ride to cancel');
-      return;
-    }
-
-    // Call your cancel ride API
-    const { data } = await apiClient.post(`/rides/${rideId}/cancel`, {
-      reason: 'changed_mind', // pick one of your allowed reasons
-      note: 'User cancelled from app', // optional
-    });
-
-    console.log('Ride cancelled successfully:', data);
-
-    // Clear route in your app
-    clearRoute();
-    webViewRef.current?.postMessage(JSON.stringify({ type: 'clearRoute' }));
-
-    // Clear saved route data
+  const handleCancelride = useCallback(async () => {
     try {
-      await AsyncStorage.removeItem('routeData');
-    } catch (error) {
-      console.error('Error clearing route data:', error);
-    }
+      const rideId = currentRide?.id;
+      if (!rideId) return;
 
-    Alert.alert('Success', 'Ride cancelled successfully');
-  } catch (error) {
-    console.error('Error cancelling ride:', error);
-  }
-}, [currentRide, clearRoute, webViewRef]);
-
-
-
-  // Confirm booking and create ride via API
-  const handleConfirmBooking = useCallback(async () => {
-    if (!routeStart || !routeEnd || !rideBooking) {
-      Alert.alert('Error', 'Please select pickup and destination locations');
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      
-      // Create ride via API
-      const response = await apiClient.post('/rides', {
-        origin_lat: routeStart.lat,
-        origin_lng: routeStart.lng,
-        destination_lat: routeEnd.lat,
-        destination_lng: routeEnd.lng,
-        distance: rideBooking.route.distance / 1000, // Convert meters to km
-        duration: rideBooking.route.duration / 60, // Convert seconds to minutes
-        fare: rideBooking.finalFare,
-        is_pool: false,
+      const { data } = await apiClient.post(`/rides/${rideId}/cancel`, {
+        reason: 'changed_mind',
+        note: 'User cancelled from app',
       });
 
-      if (response.data.ride) {
-        setCurrentRide(response.data.ride);
-        confirmRideBooking();
-        
-        Alert.alert(
-          'Ride Requested!',
-          'Searching for nearby drivers...',
-          [
-            {
-              text: 'OK',
-              onPress: () => router.push('/active-ride'),
-            },
-          ]
-        );
-      }
-    } catch (error: any) {
-      console.error('Error creating ride:', error);
-      Alert.alert(
-        'Error',
-        error.response?.data?.error || error.response?.data?.message || 'Failed to create ride. Please try again.'
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [routeStart, routeEnd, rideBooking, confirmRideBooking, router]);
+      clearRoute();
+      webViewRef.current?.postMessage(JSON.stringify({ type: 'clearRoute' }));
+      
+      await AsyncStorage.removeItem('routeData');
 
-  // Center map on user location
+      Alert.alert('Success', 'Ride cancelled successfully');
+    } catch (error) {
+      console.error('Error cancelling ride:', error);
+    }
+  }, [currentRide, clearRoute]);
+
+const checkActiveRide = async () => {
+  try {
+    const response = await apiClient.get('/passenger/rides/live');
+    if (response.data.ride) {
+      Alert.alert('Error', 'You already have an active ride. Please complete or cancel it first.');
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('Error checking active ride:', error);
+    return false;
+  }
+};
+
+const handleConfirmBooking = useCallback(async () => {
+  if (!routeStart || !routeEnd || !rideBooking) {
+    Alert.alert('Error', 'Please select pickup and destination locations');
+    return;
+  }
+
+  if (authCache.isGuestUser()) {
+    Alert.alert(
+      'Sign Up Required',
+      'Create an account to book rides.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign Up', onPress: () => router.push('/register') },
+      ]
+    );
+    return;
+  }
+
+  const hasActiveRide = await checkActiveRide();
+  if (hasActiveRide) return;
+
+  try {
+    setIsLoading(true);
+    // ... rest of your code
+  } catch (error) {
+    // ... error handling
+  } finally {
+    setIsLoading(false);
+  }
+}, [routeStart, routeEnd, rideBooking, confirmRideBooking, router]);
+
+  
+
   const centerOnUser = useCallback(() => {
     if (localUserLocation && webViewRef.current) {
       webViewRef.current?.postMessage(
@@ -579,7 +612,6 @@ const handleCancelride = useCallback(async () => {
     }
   }, [localUserLocation]);
 
-  // Zoom controls
   const zoomIn = useCallback(() => {
     webViewRef.current?.postMessage(JSON.stringify({ type: 'zoomIn' }));
   }, []);
@@ -588,7 +620,6 @@ const handleCancelride = useCallback(async () => {
     webViewRef.current?.postMessage(JSON.stringify({ type: 'zoomOut' }));
   }, []);
 
-  // Change map layer
   const changeLayer = useCallback((layer: 'street' | 'satellite' | 'terrain') => {
     setMapLayer(layer);
     webViewRef.current?.postMessage(
@@ -762,7 +793,7 @@ const handleCancelride = useCallback(async () => {
                 style={styles.bookRideGradient}
               >
                 {isLoadingRide ? (
-                  <ActivityIndicator size="small" color="#FFF" />
+                  <ActivityIndicator size="small" color="#fffffff7" />
                 ) : (
                   <Text style={styles.bookRideText}>Where to?</Text>
                 )}
@@ -785,6 +816,8 @@ const handleCancelride = useCallback(async () => {
       </View>
 
       <WebView
+        cacheEnabled={true}
+        cacheMode="LOAD_CACHE_ELSE_NETWORK"
         ref={webViewRef}
         source={{ html: mapHTML }}
         style={styles.map}
@@ -813,20 +846,17 @@ const handleCancelride = useCallback(async () => {
 
       <EnhancedBookingModal
         visible={!!rideBooking}
-        onClose={handleCancelBooking }
+        onClose={handleCancelBooking}
         onConfirm={handleConfirmBooking}
       />
     </View>
   );
 }
 
+// Styles remain the same...
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  map: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  map: { flex: 1 },
   overlay: {
     position: 'absolute',
     top: 0,

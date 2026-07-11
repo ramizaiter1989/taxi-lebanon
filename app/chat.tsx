@@ -19,6 +19,7 @@ import { chatService } from '../services/chatService';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { authCache } from '@/utils/authCache';
 
 // Types
 type User = { id: number; name: string; role?: string | null };
@@ -273,7 +274,7 @@ export default function ChatScreen() {
     if (hasInitialized.current || !rideId) return;
     hasInitialized.current = true;
     try {
-      const token = await AsyncStorage.getItem('token');
+      const token = authCache.getToken();
       if (!token) {
         Alert.alert('Error', 'You need to login first', [{ text: 'OK', onPress: () => router.replace('/') }]);
         return;

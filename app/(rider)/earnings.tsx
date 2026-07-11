@@ -33,7 +33,7 @@ export default function RiderEarningsScreen() {
       >
         <View style={styles.headerContent}>
           <View style={styles.titleContainer}>
-            <Sparkles size={28} color="#ec4899" fill="#ec4899" />
+            <Sparkles size={28} color="#671344ff" fill="#671344ff" />
             <View style={styles.titleTextContainer}>
               <Text style={styles.title}>Earnings</Text>
               <Text style={styles.subtitle}>Track your income & performance</Text>
@@ -47,7 +47,7 @@ export default function RiderEarningsScreen() {
         <View style={styles.summaryContainer}>
           <View style={[styles.summaryCard, styles.todayCard]}>
             <View style={styles.summaryIconContainer}>
-              <DollarSign size={22} color="#ec4899" />
+              <DollarSign size={22} color="#671344ff" />
             </View>
             <Text style={styles.summaryAmount}>{todayEarnings.toLocaleString()}</Text>
             <Text style={styles.summaryLabel}>Today</Text>
@@ -55,7 +55,7 @@ export default function RiderEarningsScreen() {
           
           <View style={[styles.summaryCard, styles.weekCard]}>
             <View style={styles.summaryIconContainer}>
-              <TrendingUp size={22} color="#ec4899" />
+              <TrendingUp size={22} color="#671344ff" />
             </View>
             <Text style={styles.summaryAmount}>{weekEarnings.toLocaleString()}</Text>
             <Text style={styles.summaryLabel}>This Week</Text>
@@ -72,7 +72,7 @@ export default function RiderEarningsScreen() {
           >
             <View style={styles.monthlyHeader}>
               <View style={styles.monthlyIconContainer}>
-                <Calendar size={20} color="#ec4899" />
+                <Calendar size={20} color="#671344ff" />
               </View>
               <Text style={styles.monthlyTitle}>This Month</Text>
             </View>
@@ -106,7 +106,7 @@ export default function RiderEarningsScreen() {
                   ]} 
                 >
                   <LinearGradient
-                    colors={item.day === 'Sun' ? ['#ec4899', '#f472b6'] : ['#f9a8d4', '#fbcfe8']}
+                    colors={item.day === 'Sun' ? ['#671344ff', '#ec4899'] : ['#f9a8d4', '#fbcfe8']}
                     style={styles.chartBarGradient}
                   />
                 </View>
@@ -125,7 +125,7 @@ export default function RiderEarningsScreen() {
           
           <View style={styles.metricItem}>
             <View style={[styles.metricIcon, styles.metricIcon1]}>
-              <Clock size={20} color="#ec4899" />
+              <Clock size={20} color="#671344ff" />
             </View>
             <View style={styles.metricContent}>
               <Text style={styles.metricLabel}>Average Trip Duration</Text>
@@ -135,7 +135,7 @@ export default function RiderEarningsScreen() {
 
           <View style={styles.metricItem}>
             <View style={[styles.metricIcon, styles.metricIcon2]}>
-              <TrendingUp size={20} color="#ec4899" />
+              <TrendingUp size={20} color="#671344ff" />
             </View>
             <View style={styles.metricContent}>
               <Text style={styles.metricLabel}>Acceptance Rate</Text>
@@ -145,7 +145,7 @@ export default function RiderEarningsScreen() {
 
           <View style={styles.metricItem}>
             <View style={[styles.metricIcon, styles.metricIcon3]}>
-              <DollarSign size={20} color="#ec4899" />
+              <DollarSign size={20} color="#671344ff" />
             </View>
             <View style={styles.metricContent}>
               <Text style={styles.metricLabel}>Online Hours Today</Text>
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
-    shadowColor: '#ec4899',
+    shadowColor: '#923563ff',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.12,
     shadowRadius: 8,
@@ -189,12 +189,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: 'bold',
-    color: '#831843',
+    color: '#440b24ff',
     marginBottom: 2,
   },
   subtitle: {
     fontSize: 14,
-    color: '#9d174d',
+    color: '#6b1839',
     fontWeight: '500',
   },
   content: {
@@ -212,9 +212,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 18,
     alignItems: 'center',
-    shadowColor: '#ec4899',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowColor: '#923563ff',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
     shadowRadius: 6,
     elevation: 3,
   },
@@ -230,15 +230,20 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#fdf2f8',
+    backgroundColor: '#ffffffff',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 10,
+    shadowColor: '#923563ff',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.6,
+    shadowRadius: 6,
+    elevation: 3,
   },
   summaryAmount: {
     fontSize: 19,
     fontWeight: 'bold',
-    color: '#1f2937',
+    color: '#1f1f1f',
     marginBottom: 4,
   },
   summaryLabel: {
@@ -249,12 +254,12 @@ const styles = StyleSheet.create({
   monthlyCard: {
     borderRadius: 16,
     marginBottom: 16,
-    overflow: 'hidden',
-    shadowColor: '#ec4899',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    // overflow: 'hidden',
+    shadowColor: '#923564cf',
+    shadowOffset: { width: 0, height: 7 },
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
+    elevation: 14,
   },
   monthlyGradient: {
     padding: 20,
@@ -279,12 +284,12 @@ const styles = StyleSheet.create({
   monthlyTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#831843',
+    color: '#440b24ff',
   },
   monthlyAmount: {
     fontSize: 30,
     fontWeight: 'bold',
-    color: '#ec4899',
+    color: '#671344ff',
     marginBottom: 16,
   },
   monthlyStats: {
@@ -307,11 +312,11 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#831843',
+    color: '#440b24ff',
   },
   statLabel: {
     fontSize: 12,
-    color: '#9d174d',
+    color: '#6b1839',
     marginTop: 4,
     fontWeight: '500',
   },
@@ -320,9 +325,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     marginBottom: 16,
-    shadowColor: '#ec4899',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowColor: '#923563ff',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.4,
     shadowRadius: 6,
     elevation: 3,
     borderWidth: 1,
@@ -331,7 +336,7 @@ const styles = StyleSheet.create({
   chartTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#831843',
+    color: '#440b24ff',
     marginBottom: 20,
   },
   chart: {
@@ -361,7 +366,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   chartDayActive: {
-    color: '#ec4899',
+    color: '#671344ff',
     fontWeight: '700',
   },
   chartAmount: {
@@ -373,9 +378,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderRadius: 16,
     padding: 20,
-    shadowColor: '#ec4899',
+    shadowColor: '#923564bb',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.5,
     shadowRadius: 6,
     elevation: 3,
     marginBottom: 20,
@@ -385,7 +390,7 @@ const styles = StyleSheet.create({
   performanceTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#831843',
+    color: '#440b24ff',
     marginBottom: 18,
   },
   metricItem: {
@@ -403,12 +408,27 @@ const styles = StyleSheet.create({
   },
   metricIcon1: {
     backgroundColor: '#fdf2f8',
+    shadowColor: '#923564bb',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 3,
   },
   metricIcon2: {
     backgroundColor: '#fce7f3',
+    shadowColor: '#923564bb',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 3,
   },
   metricIcon3: {
     backgroundColor: '#fbcfe8',
+    shadowColor: '#923564bb',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 3,
   },
   metricContent: {
     flex: 1,
@@ -422,6 +442,6 @@ const styles = StyleSheet.create({
   metricValue: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1f2937',
+    color: '#1f1f1f',
   },
 });

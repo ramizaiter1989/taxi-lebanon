@@ -23,6 +23,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useUser } from '@/hooks/user-store';
 import { LinearGradient } from 'expo-linear-gradient';
+import { authCache } from '@/utils/authCache';
 
 interface SettingsItem {
   id: string;
@@ -57,10 +58,11 @@ export default function SettingsScreen() {
   const { user, logout } = useUser();
 
     const handleLogout = () => {
-      const confirmlogout=  () =>
-      {
+      const confirmlogout = async () => {
+        await authCache.clear();
         logout();
-      router.replace('/login');}
+        router.replace('/login');
+      };
   
       Alert.alert(
             'Logout',

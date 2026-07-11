@@ -2,6 +2,8 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import { Home, Clock, Settings, Car } from 'lucide-react-native';
 import { Platform } from 'react-native';
+import { authCache } from '@/utils/authCache';
+import mapHTML from '@/utils/mapHTML';
 export default function ClientTabsLayout() {
   return (
     <Tabs

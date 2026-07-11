@@ -24,6 +24,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '@/constants/config';
+import { authCache } from '@/utils/authCache';
 
 interface Trip {
   id: number;
@@ -105,7 +106,7 @@ export default function RiderHistoryScreen() {
   // Fetch trips from API
   const fetchTrips = useCallback(async (page: number = 1, isRefresh: boolean = false) => {
     try {
-      const authToken = await AsyncStorage.getItem('token');
+      const authToken =  authCache.getToken();
       if (!authToken) {
         console.error('No auth token found');
         return;
@@ -187,7 +188,7 @@ export default function RiderHistoryScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#d65c9e" />
+          <ActivityIndicator size="large" color="#ec4899" />
           <Text style={styles.loadingText}>Loading trips...</Text>
         </View>
       </SafeAreaView>
@@ -197,18 +198,16 @@ export default function RiderHistoryScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <LinearGradient
-        colors={['#f8e8f5', '#f4d0ec', '#f0b6d9']}
+        colors={['#fce7f3bb', '#fbcfe8a9', '#f9a8d486']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.header}
       >
         <Text style={styles.title}>Trip History</Text>
-        <Text style={styles.subtitle}>Your completed journeys</Text>
-
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
             <View style={styles.statIconContainer}>
-              <Navigation size={20} color="#d65c9e" />
+              <Navigation size={20} color="#671344ff" />
             </View>
             <Text style={styles.statNumber}>{completedTrips.length}</Text>
             <Text style={styles.statLabel}>Total Trips</Text>
@@ -216,7 +215,7 @@ export default function RiderHistoryScreen() {
 
           <View style={styles.statCard}>
             <View style={styles.statIconContainer}>
-              <DollarSign size={20} color="#d65c9e" />
+              <DollarSign size={20} color="#671344ff" />
             </View>
             <Text style={styles.statNumber}>€{totalEarnings.toFixed(2)}</Text>
             <Text style={styles.statLabel}>Earned</Text>
@@ -224,7 +223,7 @@ export default function RiderHistoryScreen() {
 
           <View style={styles.statCard}>
             <View style={styles.statIconContainer}>
-              <Star size={20} color="#d65c9e" fill="#d65c9e" />
+              <Star size={20} color="#671344ff" fill="#671344ff" />
             </View>
             <Text style={styles.statNumber}>{avgRating}</Text>
             <Text style={styles.statLabel}>Avg Rating</Text>
@@ -239,14 +238,14 @@ export default function RiderHistoryScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={['#d65c9e']}
-            tintColor="#d65c9e"
+            colors={['#ec4899']}
+            tintColor="#ec4899"
           />
         }
       >
         {trips.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Navigation size={64} color="#f4d0ec" />
+            <Navigation size={64} color="#f9a8d4" />
             <Text style={styles.emptyText}>No trips yet</Text>
             <Text style={styles.emptySubtext}>Your trip history will appear here</Text>
           </View>
@@ -260,12 +259,12 @@ export default function RiderHistoryScreen() {
             >
               <View style={styles.rideHeader}>
                 <View style={styles.dateContainer}>
-                  <Calendar size={18} color="#ad4a78" />
+                  <Calendar size={18} color="#671344ff" />
                   <Text style={styles.dateText}>{formatDate(ride.timestamps.requested_at)}</Text>
                 </View>
                 {ride.status === 'completed' ? (
                   <LinearGradient
-                    colors={['#e879b8', '#f0a7c4']}
+                    colors={['#e361a280', '#ab1275bd', '#f985c1c3']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.fareContainer}
@@ -310,12 +309,12 @@ export default function RiderHistoryScreen() {
                 <View style={styles.footerLeft}>
                   <View style={styles.passengerContainer}>
                     <View style={styles.passengerIcon}>
-                      <User size={14} color="#d65c9e" />
+                      <User size={14} color="#671344ff" />
                     </View>
                     <Text style={styles.passengerText}>{ride.passenger.name}</Text>
                   </View>
                   <View style={styles.durationContainer}>
-                    <Clock size={14} color="#ad4a78" />
+                    <Clock size={14} color="#6b1839" />
                     <Text style={styles.durationText}>
                       {Math.round(ride.route_info.trip_route.duration_minutes)} min
                     </Text>
@@ -324,7 +323,7 @@ export default function RiderHistoryScreen() {
 
                 {ride.status === 'completed' && ride.driver && (
                   <View style={styles.ratingContainer}>
-                    <Star size={16} color="#f4c2c2" fill="#f4c2c2" />
+                    <Star size={16} color="#fbbf24" fill="#fbbf24" />
                     <Text style={styles.ratingText}>{ride.driver.rating.toFixed(1)}</Text>
                   </View>
                 )}
@@ -341,14 +340,14 @@ export default function RiderHistoryScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <LinearGradient
-              colors={['#f8e8f5', '#f4d0ec']}
+              colors={['#fce7f3', '#fbcfe8']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.modalHeader}
             >
               <Text style={styles.modalTitle}>Trip Details</Text>
               <TouchableOpacity onPress={() => setSelectedTrip(null)}>
-                <X size={24} color="#8a3b62" />
+                <X size={24} color="#440b24ff" />
               </TouchableOpacity>
             </LinearGradient>
             {selectedTrip && (
@@ -356,7 +355,7 @@ export default function RiderHistoryScreen() {
                 <View style={styles.detailSection}>
                   <Text style={styles.detailSectionTitle}>Trip Information</Text>
                   <View style={styles.detailRow}>
-                    <Calendar size={20} color="#d65c9e" />
+                    <Calendar size={20} color="#671344ff" />
                     <Text style={styles.detailText}>
                       {new Date(selectedTrip.timestamps.requested_at).toLocaleDateString('en-US', {
                         weekday: 'long',
@@ -367,7 +366,7 @@ export default function RiderHistoryScreen() {
                     </Text>
                   </View>
                   <View style={styles.detailRow}>
-                    <Clock size={20} color="#d65c9e" />
+                    <Clock size={20} color="#671344ff" />
                     <Text style={styles.detailText}>{formatTime(selectedTrip.timestamps.requested_at)}</Text>
                   </View>
                 </View>
@@ -376,7 +375,7 @@ export default function RiderHistoryScreen() {
                   <Text style={styles.detailSectionTitle}>Route</Text>
                   <View style={styles.detailRoute}>
                     <View style={styles.detailRoutePoint}>
-                      <MapPin size={20} color="#d65c9e" />
+                      <MapPin size={20} color="#671344ff" />
                       <View style={styles.detailRouteInfo}>
                         <Text style={styles.detailRouteLabel}>Pickup</Text>
                         <Text style={styles.detailRouteText}>{selectedTrip.origin.address}</Text>
@@ -384,7 +383,7 @@ export default function RiderHistoryScreen() {
                     </View>
                     <View style={styles.detailRouteLine} />
                     <View style={styles.detailRoutePoint}>
-                      <Flag size={20} color="#8a3b62" />
+                      <Flag size={20} color="#440b24ff" />
                       <View style={styles.detailRouteInfo}>
                         <Text style={styles.detailRouteLabel}>Destination</Text>
                         <Text style={styles.detailRouteText}>{selectedTrip.destination.address}</Text>
@@ -397,12 +396,12 @@ export default function RiderHistoryScreen() {
                   <Text style={styles.detailSectionTitle}>Trip Stats</Text>
                   <View style={styles.statsGrid}>
                     <View style={styles.statsBox}>
-                      <Navigation size={24} color="#d65c9e" />
+                      <Navigation size={24} color="#671344ff" />
                       <Text style={styles.statsValue}>{selectedTrip.route_info.trip_route.distance_km} km</Text>
                       <Text style={styles.statsLabel}>Distance</Text>
                     </View>
                     <View style={styles.statsBox}>
-                      <Clock size={24} color="#d65c9e" />
+                      <Clock size={24} color="#671344ff" />
                       <Text style={styles.statsValue}>{Math.round(selectedTrip.route_info.trip_route.duration_minutes)} min</Text>
                       <Text style={styles.statsLabel}>Duration</Text>
                     </View>
@@ -423,7 +422,7 @@ export default function RiderHistoryScreen() {
                           <Text style={styles.passengerName}>{selectedTrip.passenger.name}</Text>
                           {selectedTrip.driver && (
                             <View style={styles.ratingBadge}>
-                              <Star size={16} color="#FFB800" fill="#FFB800" />
+                              <Star size={16} color="#fbbf24" fill="#fbbf24" />
                               <Text style={styles.ratingBadgeText}>{selectedTrip.driver.rating}</Text>
                             </View>
                           )}
@@ -473,7 +472,7 @@ export default function RiderHistoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff9fc',
+    backgroundColor: '#fdf4ffff',
   },
   loadingContainer: {
     flex: 1,
@@ -483,7 +482,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#8a3b62',
+    color: '#440b24ff',
   },
   header: {
     paddingHorizontal: 20,
@@ -491,21 +490,21 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
-    shadowColor: '#d65c9e',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
+    shadowColor: '#9235647c',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
     shadowRadius: 6,
-    elevation: 4,
+    elevation: 14,
   },
   title: {
-    fontSize: 26,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#8a3b62',
+    color: '#440b24ff',
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
-    color: '#ad4a78',
+    color: '#6b1839',
     marginBottom: 18,
   },
   statsContainer: {
@@ -514,14 +513,14 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
     borderRadius: 16,
     padding: 14,
     alignItems: 'center',
-    shadowColor: '#d65c9e',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowColor: '#923563ff',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
     elevation: 2,
   },
   statIconContainer: {
@@ -532,21 +531,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
-    shadowColor: '#d65c9e',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowColor: '#ec489ae4',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 18,
   },
   statNumber: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#8a3b62',
+    color: '#440b24ff',
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
-    color: '#ad4a78',
+    color: '#6b1839',
     fontWeight: '500',
   },
   content: {
@@ -561,12 +560,12 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#8a3b62',
+    color: '#440b24ff',
     marginTop: 16,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#ad4a78',
+    color: '#6b1839',
     marginTop: 8,
   },
   rideCard: {
@@ -574,13 +573,13 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 18,
     marginBottom: 16,
-    shadowColor: '#d65c9e',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
+    shadowColor: '#923563ff',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
     elevation: 3,
-    borderWidth: 1,
-    borderColor: '#f8e8f5',
+    borderWidth: 4,
+    borderColor: '#fce7f38d',
   },
   rideHeader: {
     flexDirection: 'row',
@@ -599,7 +598,7 @@ const styles = StyleSheet.create({
   dateText: {
     marginLeft: 8,
     fontSize: 13,
-    color: '#ad4a78',
+    color: '#6b1839',
     fontWeight: '600',
   },
   fareContainer: {
@@ -640,14 +639,14 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#d65c9e',
+    backgroundColor: '#671344ff',
     marginTop: 4,
   },
   dropoffDot: {
     width: 12,
     height: 12,
     borderRadius: 2,
-    backgroundColor: '#e879b8',
+    backgroundColor: '#ec4899',
     marginTop: 4,
   },
   routeTextContainer: {
@@ -656,7 +655,7 @@ const styles = StyleSheet.create({
   },
   routeLabel: {
     fontSize: 11,
-    color: '#ad4a78',
+    color: '#6b1839',
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -664,7 +663,7 @@ const styles = StyleSheet.create({
   },
   routeText: {
     fontSize: 15,
-    color: '#374151',
+    color: '#1f1f1f',
     fontWeight: '600',
   },
   routeLine: {
@@ -675,7 +674,7 @@ const styles = StyleSheet.create({
   routeLineDashed: {
     width: 2,
     height: 24,
-    backgroundColor: '#f4d0ec',
+    backgroundColor: '#f9a8d4',
     borderRadius: 1,
   },
   rideFooter: {
@@ -684,7 +683,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: '#f8e8f5',
+    borderTopColor: '#fce7f3',
   },
   footerLeft: {
     flex: 1,
@@ -698,14 +697,14 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: '#fef7f9',
+    backgroundColor: '#fdf2f8',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
   },
   passengerText: {
     fontSize: 14,
-    color: '#4b5563',
+    color: '#1f1f1f',
     fontWeight: '600',
   },
   durationContainer: {
@@ -716,7 +715,7 @@ const styles = StyleSheet.create({
   durationText: {
     marginLeft: 6,
     fontSize: 13,
-    color: '#9ca3af',
+    color: '#9ea6b4ff',
   },
   ratingContainer: {
     flexDirection: 'row',
@@ -732,7 +731,7 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     fontSize: 15,
     fontWeight: 'bold',
-    color: '#d65c9e',
+    color: '#671344ff',
   },
   bottomSpacer: {
     height: 24,
@@ -754,12 +753,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#f8e8f5',
+    borderBottomColor: '#fce7f3',
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#8a3b62',
+    color: '#440b24ff',
   },
   modalDetailsContent: {
     padding: 20,
@@ -771,7 +770,7 @@ const styles = StyleSheet.create({
   detailSectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#8a3b62',
+    color: '#440b24ff',
     marginBottom: 12,
   },
   detailRow: {
@@ -782,7 +781,7 @@ const styles = StyleSheet.create({
   },
   detailText: {
     fontSize: 14,
-    color: '#4b5563',
+    color: '#1f1f1f',
   },
   detailRoute: {
     backgroundColor: '#fef7f9',
@@ -799,20 +798,20 @@ const styles = StyleSheet.create({
   },
   detailRouteLabel: {
     fontSize: 12,
-    color: '#ad4a78',
+    color: '#6b1839',
     marginBottom: 4,
     textTransform: 'uppercase',
     fontWeight: '700',
   },
   detailRouteText: {
     fontSize: 14,
-    color: '#374151',
+    color: '#1f1f1f',
     fontWeight: '600',
   },
   detailRouteLine: {
     width: 2,
     height: 20,
-    backgroundColor: '#f4d0ec',
+    backgroundColor: '#f9a8d4',
     marginLeft: 9,
     marginVertical: 8,
   },
@@ -830,13 +829,13 @@ const styles = StyleSheet.create({
   statsValue: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#8a3b62',
+    color: '#440b24ff',
     marginTop: 8,
     marginBottom: 4,
   },
   statsLabel: {
     fontSize: 12,
-    color: '#ad4a78',
+    color: '#6b1839',
   },
   passengerInfo: {
     flexDirection: 'row',
@@ -849,7 +848,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#d65c9e',
+    backgroundColor: '#671344ff',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -865,7 +864,7 @@ const styles = StyleSheet.create({
   passengerName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#8a3b62',
+    color: '#440b24ff',
     marginBottom: 4,
   },
   ratingBadge: {
@@ -876,7 +875,7 @@ const styles = StyleSheet.create({
   ratingBadgeText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#ad4a78',
+    color: '#6b1839',
   },
   paymentInfo: {
     backgroundColor: '#fef7f9',
@@ -891,27 +890,27 @@ const styles = StyleSheet.create({
   },
   paymentLabel: {
     fontSize: 14,
-    color: '#ad4a78',
+    color: '#6b1839',
   },
   paymentValue: {
     fontSize: 14,
-    color: '#8a3b62',
+    color: '#440b24ff',
     fontWeight: '500',
   },
   paymentDivider: {
     height: 1,
-    backgroundColor: '#f4d0ec',
+    backgroundColor: '#f9a8d4',
     marginVertical: 8,
   },
   paymentTotalLabel: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#8a3b62',
+    color: '#440b24ff',
   },
   paymentTotalValue: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#d65c9e',
+    color: '#671344ff',
   },
   cancelledNotice: {
     backgroundColor: '#fecaca',

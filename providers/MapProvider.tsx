@@ -4,7 +4,9 @@ import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { Alert } from 'react-native';
+import { router } from 'expo-router';
 import { API_BASE_URL } from '@/constants/config';
+import { authCache } from '@/utils/authCache';
 
 interface Marker {
   id: string;
@@ -57,6 +59,24 @@ interface RideBooking {
   discount?: number;
 }
 
+export interface DestinationDetails {
+  title: string;
+  address: string;
+  coordinates: {
+    lat: number;
+    lng: number;
+  };
+}
+
+export interface PickupDetails {
+  title: string;
+  address: string;
+  coordinates: {
+    lat: number;
+    lng: number;
+  };
+}
+
 interface MapContextType {
   markers: Marker[];
   selectedPlace: Marker | null;
@@ -91,6 +111,12 @@ interface MapContextType {
   addSavedLocation: (location: SavedLocation) => void;
   removeSavedLocation: (id: string) => void;
   selectSavedLocation: (location: SavedLocation, type: 'pickup' | 'destination') => void;
+  getReadableDestination: () => string | null;
+  getDestinationDetails: () => DestinationDetails | null;
+  getReadablePickup: () => string | null;
+  getPickupDetails: () => PickupDetails | null;
+  hasDestination: () => boolean;
+  hasPickup: () => boolean;
 }
 
 export const VEHICLE_OPTIONS: VehicleOption[] = [
@@ -207,44 +233,97 @@ export const [MapProvider, useMap] = createContextHook<MapContextType>(() => {
       console.error('Error getting current location:', error);
     }
   }, []);
+  
+// Optimized startRideBooking in MapProvider.tsx
+
 
 const startRideBooking = useCallback(async () => {
   try {
-    const authToken = await AsyncStorage.getItem('token');
-    if (!authToken) {
-      console.log('No auth token found');
-      return;
-    }
-
-    // Request location permission
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      console.log('Location permission denied');
-      return;
-    }
-
-    const location = await Location.getCurrentPositionAsync({});
-    setUserLocation({ lat: location.coords.latitude, lng: location.coords.longitude });
-
-    // Set booking mode to show UI
+    // 1. Enable booking mode IMMEDIATELY - don't wait for anything
     setIsBookingMode(true);
+    setIsRoutingMode(true);
 
-    // Optional: set route start automatically to current location
-    const currentLocationMarker: Marker = {
-      id: 'pickup-location',
-      lat: location.coords.latitude,
-      lng: location.coords.longitude,
-      title: 'Pickup Location',
-      description: 'Your current location'
+    // 2. Get location in background - use cached/last known if available
+    const getLocationQuickly = async () => {
+      try {
+        // Try to get last known location first (instant)
+        const lastKnown = await Location.getLastKnownPositionAsync();
+        if (lastKnown) {
+          return lastKnown;
+        }
+        
+        // Fall back to current location with timeout
+        return await Promise.race([
+          Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          }),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Location timeout')), 5000)
+          )
+        ]);
+      } catch (error) {
+        console.warn('Location error:', error);
+        return null;
+      }
     };
-    
-      setRouteStart(currentLocationMarker);
-      setIsBookingMode(true);
-      setIsRoutingMode(true);
-    } catch (error) {
-      console.error('Error getting current location:', error);
-    }
-  }, []);
+
+    // 3. Get location without blocking UI
+    getLocationQuickly().then(async (location) => {
+      if (!location) return;
+
+      const { latitude, longitude } = location.coords;
+      const lat = parseFloat(latitude.toFixed(6));
+      const lng = parseFloat(longitude.toFixed(6));
+
+      // Update user location
+      setUserLocation({ lat, lng });
+
+      // Create placeholder marker immediately
+      const placeholderMarker: Marker = {
+        id: 'pickup-location',
+        lat,
+        lng,
+        title: 'Current Location',
+        description: 'Getting address...',
+      };
+      setRouteStart(placeholderMarker);
+
+      // Update with actual address in background (non-blocking)
+      Location.reverseGeocodeAsync({ latitude, longitude })
+        .then(([address]) => {
+          if (!address) return;
+          
+          const parts = [
+            address.street,
+            address.city,
+            address.region
+          ].filter(Boolean);
+          
+          const readableAddress = parts.length > 0 
+            ? parts.join(', ') 
+            : 'Current Location';
+
+          // Update marker with real address
+          setRouteStart({
+            id: 'pickup-location',
+            lat,
+            lng,
+            title: readableAddress,
+            description: readableAddress,
+          });
+        })
+        .catch(err => console.warn('Reverse geocoding failed:', err));
+    });
+
+  } catch (error) {
+    console.error('Error starting ride booking:', error);
+    // Still enable booking mode even if location fails
+    setIsBookingMode(true);
+    setIsRoutingMode(true);
+  }
+}, []);
+
+
 
   const calculateBaseFare = useCallback((distance: number, duration: number): number => {
     const baseFare = 5000;
@@ -347,39 +426,54 @@ const startRideBooking = useCallback(async () => {
     }
   }, [rideBooking, selectedVehicleType, calculateFinalFare]);
 
-const confirmRideBooking = useCallback(async () => {
-  if (!rideBooking) return;
+  const confirmRideBooking = useCallback(async () => {
+    if (!rideBooking) return;
 
-  try {
-    const token = await AsyncStorage.getItem('token');
-    if (!token) {
-      console.log('No auth token found');
+    if (authCache.isGuestUser()) {
+      Alert.alert(
+        'Sign Up Required',
+        'Create an account to book rides. You can keep browsing the map as a guest.',
+        [
+          { text: 'Continue Browsing', style: 'cancel' },
+          { text: 'Sign Up', onPress: () => router.push('/register') },
+        ]
+      );
       return;
     }
 
-    const response = await axios.post(
-      `${API_BASE_URL}/rides`,
-      {
-        origin_lat: rideBooking.pickup.lat,
-        origin_lng: rideBooking.pickup.lng,
-        destination_lat: rideBooking.destination?.lat,
-        destination_lng: rideBooking.destination?.lng,
-      },
-      {
-        headers: { Authorization: `Bearer ${token}` }
+    if (authCache.isMockUser()) {
+      Alert.alert('Demo Mode', 'Ride booking is not connected to the server in demo mode.');
+      return;
+    }
+
+    try {
+      const token = authCache.getToken();
+      if (!token) {
+        console.log('No auth token found');
+        return;
       }
-    );
 
-    console.log('Ride created:', response.data);
-    // Save ride ID locally if needed
-    setRideBooking(prev => prev ? { ...prev, id: response.data.id } : prev);
+      const response = await axios.post(
+        `${API_BASE_URL}/rides`,
+        {
+          origin_lat: rideBooking.pickup.lat,
+          origin_lng: rideBooking.pickup.lng,
+          destination_lat: rideBooking.destination?.lat,
+          destination_lng: rideBooking.destination?.lng,
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
 
-  } catch (error: any) {
-    console.error('Failed to create ride:', error.response?.data || error.message);
-    Alert.alert('Error', error.response?.data?.error || 'Failed to create ride');
-  }
-}, [rideBooking]);
+      console.log('Ride created:', response.data);
+      setRideBooking(prev => prev ? { ...prev, id: response.data.id } : prev);
 
+    } catch (error: any) {
+      console.error('Failed to create ride:', error.response?.data || error.message);
+      Alert.alert('Error', error.response?.data?.error || 'Failed to create ride');
+    }
+  }, [rideBooking]);
 
   const cancelRideBooking = useCallback(() => {
     setRideBooking(null);
@@ -433,6 +527,65 @@ const confirmRideBooking = useCallback(async () => {
     }
   }, []);
 
+  // ✅ NEW HELPER FUNCTIONS FOR READABLE DESTINATION
+  const getReadableDestination = useCallback((): string | null => {
+    if (rideBooking?.destination) {
+      return rideBooking.destination.title;
+    }
+    if (routeEnd) {
+      return routeEnd.title;
+    }
+    return null;
+  }, [rideBooking, routeEnd]);
+
+  const getDestinationDetails = useCallback((): DestinationDetails | null => {
+    const destination = rideBooking?.destination || routeEnd;
+    if (!destination) return null;
+    
+    return {
+      title: destination.title,
+      address: destination.description,
+      coordinates: {
+        lat: destination.lat,
+        lng: destination.lng
+      }
+    };
+  }, [rideBooking, routeEnd]);
+
+  // ✅ NEW HELPER FUNCTIONS FOR READABLE PICKUP
+  const getReadablePickup = useCallback((): string | null => {
+    if (rideBooking?.pickup) {
+      return rideBooking.pickup.title;
+    }
+    if (routeStart) {
+      return routeStart.title;
+    }
+    return null;
+  }, [rideBooking, routeStart]);
+
+  const getPickupDetails = useCallback((): PickupDetails | null => {
+    const pickup = rideBooking?.pickup || routeStart;
+    if (!pickup) return null;
+    
+    return {
+      title: pickup.title,
+      address: pickup.description,
+      coordinates: {
+        lat: pickup.lat,
+        lng: pickup.lng
+      }
+    };
+  }, [rideBooking, routeStart]);
+
+  // ✅ HELPER FUNCTIONS TO CHECK IF LOCATIONS ARE SET
+  const hasDestination = useCallback((): boolean => {
+    return !!(rideBooking?.destination || routeEnd);
+  }, [rideBooking, routeEnd]);
+
+  const hasPickup = useCallback((): boolean => {
+    return !!(rideBooking?.pickup || routeStart);
+  }, [rideBooking, routeStart]);
+
   return useMemo(() => ({
     markers,
     selectedPlace,
@@ -467,12 +620,19 @@ const confirmRideBooking = useCallback(async () => {
     addSavedLocation,
     removeSavedLocation,
     selectSavedLocation,
+    getReadableDestination,
+    getDestinationDetails,
+    getReadablePickup,
+    getPickupDetails,
+    hasDestination,
+    hasPickup,
   }), [
     markers, selectedPlace, currentRoute, isRoutingMode, routeStart, routeEnd, 
     userLocation, rideBooking, isBookingMode, selectedVehicleType, selectedPaymentMethod,
     savedLocations, promoCode, addMarker, removeMarker, clearMarkers, setRoutingMode,
     calculateRoute, clearRoute, startRoutingFromCurrentLocation, startRideBooking,
     confirmRideBooking, cancelRideBooking, setVehicleType, setPaymentMethod, applyPromoCode,
-    addSavedLocation, removeSavedLocation, selectSavedLocation
+    addSavedLocation, removeSavedLocation, selectSavedLocation, getReadableDestination,
+    getDestinationDetails, getReadablePickup, getPickupDetails, hasDestination, hasPickup
   ]);
 });

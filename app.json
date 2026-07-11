@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Bella Ride",
+    "name": "She Moves",
     "slug": "lebanon-women-only-ride-hailing-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,6 +16,7 @@
     "ios": {
       "googleServicesFile": "./GoogleService-Info.plist",
       "supportsTablet": true,
+      "supportsRTL": true,
       "bundleIdentifier": "com.rami.bellaride",
       "infoPlist": {
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow Bella Ride to use your location.",
@@ -34,6 +35,7 @@
       }
     },
     "android": {
+      "supportsRTL": true,
       "googleServicesFile": "./android/app/google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
@@ -78,11 +80,13 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/icon.png", 
+          "icon": "./assets/images/icon.png",
           "color": "#ffffff"
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-font",
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true
