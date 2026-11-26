@@ -1,52 +1,41 @@
-# Welcome to your Rork app
+# Taxi Lebanon: ride-hailing app (Expo / React Native)
 
-**Web & Credit Card Payments (works in Expo Go):**
+![Expo](https://img.shields.io/badge/Expo-SDK%2054-000020?style=flat-square&logo=expo&logoColor=white)
+![React Native](https://img.shields.io/badge/React%20Native-0.81-61DAFB?style=flat-square&logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)
 
-- **Stripe** - Credit card payments and subscriptions - [Expo + Stripe Guide](https://docs.expo.dev/guides/using-stripe/)
-- **PayPal** - PayPal payments integration - [Setup Guide](https://developer.paypal.com/docs/checkout/mobile/react-native/)
+A ride-hailing app for passengers, drivers and admins, all in one codebase. The API is [taxi-lebanon-backend](https://github.com/ramizaiter1989/taxi-lebanon-backend) (Laravel 12 + Reverb).
 
-**Native In-App Purchases (requires Custom Development Build):**
+## Features
 
-- **RevenueCat** - Cross-platform in-app purchases and subscriptions - [Expo Integration Guide](https://www.revenuecat.com/docs/expo)
-- **Expo In-App Purchases** - Direct App Store/Google Play integration - [Implementation Guide](https://docs.expo.dev/versions/latest/sdk/in-app-purchases/)
+- **Three roles, one app.** Expo Router route groups `(client)`, `(rider)` and `(admin)`, each with its own tab layout, chosen at sign-in.
+- **Live rides.** Request a ride, see the driver move on the map (`react-native-maps`), and follow the active ride, trip history and driver earnings.
+- **Realtime.** Laravel Echo over the Pusher protocol listens to ride and location events from Reverb. There is no polling.
+- **In-ride chat** between passenger and driver.
+- **Push notifications** with `expo-notifications`; the device token is registered with the API.
+- **Auth.** Sign-up, OTP verification, password reset, driver profile completion.
+- **i18n.** `react-i18next` with in-app language switching and device-locale detection.
+- **State and data.** Zustand for app state, TanStack Query for server state, a typed API client in `services/`.
 
-**Paywall Optimization:**
+## Project layout
 
-- **Superwall** - Paywall A/B testing and optimization - [React Native SDK](https://docs.superwall.com/docs/react-native)
-- **Adapty** - Mobile subscription analytics and paywalls - [Expo Integration](https://docs.adapty.io/docs/expo)
+```
+app/            Expo Router screens: (client) (rider) (admin), auth, chat, ride tracking
+services/       api.ts, AuthService, NotificationService, chatService, echo.ts
+providers/      MapProvider, UserProvider
+components/ hooks/ constants/ types/ utils/
+```
 
-## I want to use a custom domain - is that possible?
+## Run locally
 
-For web deployments, you can use custom domains with:
+```bash
+npm install
+npx expo start          # Expo Go or a dev build
+npx expo run:android    # native build
+```
 
-- **EAS Hosting** - Custom domains available on paid plans
-- **Netlify** - Free custom domain support
-- **Vercel** - Custom domains with automatic SSL
+Set the API and WebSocket URLs in the app config before running.
 
-For mobile apps, you'll configure your app's deep linking scheme in `app.json`.
+## Author
 
-## Troubleshooting
-
-### **App not loading on device?**
-
-1. Make sure your phone and computer are on the same WiFi network
-2. Try using tunnel mode: `bun start -- --tunnel`
-3. Check if your firewall is blocking the connection
-
-### **Build failing?**
-
-1. Clear your cache: `bunx expo start --clear`
-2. Delete `node_modules` and reinstall: `rm -rf node_modules && bun install`
-3. Check [Expo's troubleshooting guide](https://docs.expo.dev/troubleshooting/build-errors/)
-
-### **Need help with native features?**
-
-- Check [Expo's documentation](https://docs.expo.dev/) for native APIs
-- Browse [React Native's documentation](https://reactnative.dev/docs/getting-started) for core components
-- Visit [Rork's FAQ](https://rork.com/faq) for platform-specific questions
-
-## About Rork
-
-Rork builds fully native mobile apps using React Native and Expo - the same technology stack used by Discord, Shopify, Coinbase, Instagram, and nearly 30% of the top 100 apps on the App Store.
-
-Your Rork app is production-ready and can be published to both the App Store and Google Play Store. You can also export your app to run on the web, making it truly cross-platform.
+**Rami Zeaiter**, Lead Full-Stack Developer & Tech Lead · [rami-z-company.com](https://rami-z-company.com)
